@@ -11,10 +11,24 @@ import {
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 
+function logInfo(message: string) {
+    if (outputChannel) {
+        outputChannel.appendLine(message);
+    }
+    console.log(message);
+}
+
+function logError(message: string) {
+    if (outputChannel) {
+        outputChannel.appendLine(`[ERROR] ${message}`);
+    }
+    console.error(message);
+}
+
 export function activate(context: vscode.ExtensionContext) {
     // 出力チャネルを作成し、即座にログを出力できるようにする
     outputChannel = vscode.window.createOutputChannel('Docs Auditor');
-    outputChannel.appendLine('[Docs Auditor] 拡張機能アクティベート処理を開始しました。');
+    logInfo('[Docs Auditor] 拡張機能アクティベート処理を開始しました。');
 
     const serverExe = process.platform === 'win32' ? 'server.exe' : 'server';
     
@@ -33,12 +47,12 @@ export function activate(context: vscode.ExtensionContext) {
         serverPath = releaseServerPath;
     }
 
-    outputChannel.appendLine(`[Docs Auditor] LSP サーバーパスを決定しました: ${serverPath}`);
+    logInfo(`[Docs Auditor] LSP サーバーパスを決定しました: ${serverPath}`);
 
     // サーバーバイナリが存在しない場合は警告を表示
     if (!fs.existsSync(serverPath)) {
         const errorMsg = `Docs Auditor LSP サーバーバイナリが見つかりません。Rustコードをビルドしてください: ${serverPath}`;
-        outputChannel.appendLine(`[Docs Auditor] ERROR: ${errorMsg}`);
+        logError(errorMsg);
         vscode.window.showWarningMessage(errorMsg);
     }
 
@@ -59,13 +73,13 @@ export function activate(context: vscode.ExtensionContext) {
         ],
         outputChannel: outputChannel,
         initializationFailedHandler: (error) => {
-            outputChannel?.appendLine(`[Docs Auditor] LSP サーバー初期化に失敗しました: ${error}`);
+            logError(`LSP サーバー初期化に失敗しました: ${error}`);
             // false を返して再試行しないようにする
             return false;
         }
     };
 
-    outputChannel.appendLine('[Docs Auditor] LanguageClient インスタンスを作成しています...');
+    logInfo('[Docs Auditor] LanguageClient インスタンスを作成しています...');
     client = new LanguageClient(
         'docsAuditor',
         'Docs Auditor',
@@ -73,21 +87,20 @@ export function activate(context: vscode.ExtensionContext) {
         clientOptions
     );
 
-    outputChannel.appendLine('[Docs Auditor] LanguageClient を起動しています...');
+    logInfo('[Docs Auditor] LanguageClient を起動しています...');
     client.start().then(() => {
-        outputChannel?.appendLine('[Docs Auditor] LSP サーバーが正常に起動・接続されました。');
+        logInfo('[Docs Auditor] LSP サーバーが正常に起動・接続されました。');
     }).catch((error) => {
-        outputChannel?.appendLine(`[Docs Auditor] LSP サーバーの起動中に致命的なエラーが発生しました: ${error}`);
+        logError(`LSP サーバーの起動中に致命的なエラーが発生しました: ${error}`);
     });
 }
 
 export function deactivate(): Thenable<void> | undefined {
-    if (outputChannel) {
-        outputChannel.appendLine('[Docs Auditor] 拡張機能非アクティベート処理を実行します。');
-    }
+    logInfo('[Docs Auditor] 拡張機能非アクティベート処理を実行します。');
     if (!client) {
         return undefined;
     }
     return client.stop();
 }
+
 
