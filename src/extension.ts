@@ -72,6 +72,9 @@ export function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'rust' }
         ],
         outputChannel: outputChannel,
+        initializationOptions: {
+            locale: vscode.env.language
+        },
         initializationFailedHandler: (error) => {
             logError(`LSP サーバー初期化に失敗しました: ${error}`);
             // false を返して再試行しないようにする

@@ -10,14 +10,17 @@ mod parser;
 mod state;
 mod auditor;
 mod locker;
+mod i18n;
 
 use state::hfsm::{Hfsm, Event};
 use auditor::{audit_symbols, AuditIssue, AuditIssueType};
+use i18n::{get_message, MessageKey};
 
 struct Backend {
     client: Client,
     state: Arc<Mutex<Hfsm>>,
     root_path: Arc<Mutex<Option<PathBuf>>>,
+    locale: Arc<Mutex<String>>,
 }
 
 #[tower_lsp::async_trait]
@@ -30,6 +33,16 @@ impl LanguageServer for Backend {
         if let Some(uri) = params.root_uri {
             if let Ok(path) = uri.to_file_path() {
                 *root_path = Some(path);
+            }
+        }
+
+        // initialization_options から locale を抽出して保存する
+        if let Some(options) = params.initialization_options {
+            if let Some(locale_val) = options.get("locale") {
+                if let Some(locale_str) = locale_val.as_str() {
+                    let mut locale = self.locale.lock().await;
+                    *locale = locale_str.to_string();
+                }
             }
         }
 
@@ -107,11 +120,14 @@ impl LanguageServer for Backend {
                             let mut changes = std::collections::HashMap::new();
                             changes.insert(uri.clone(), vec![edit]);
 
+                            let locale = self.locale.lock().await;
+                            let title = get_message(
+                                &MessageKey::CodeActionTitle(format!("L{}-{}", code_range.0, code_range.1)),
+                                &locale,
+                            );
+
                             let action = CodeAction {
-                                title: format!(
-                                    "行番号 (L{}-{}) を仕様書に自動追記する",
-                                    code_range.0, code_range.1
-                                ),
+                                title,
                                 kind: Some(CodeActionKind::QUICKFIX),
                                 diagnostics: Some(vec![diagnostic.clone()]),
                                 edit: Some(WorkspaceEdit {
@@ -138,9 +154,6 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn on_change(&self, uri: Url, text: String) {
-        // デバッグ用の一時的no-op化
-        return;
-
         {
             self.state.lock().await.dispatch(Event::DocumentChanged);
         }
@@ -237,7 +250,8 @@ impl Backend {
         let spec_symbols = parser::parse_markdown_spec(&spec_text);
         let code_symbols = parser::parse_rust_code(&code_text);
 
-        let issues = audit_symbols(&spec_symbols, &code_symbols);
+        let locale = self.locale.lock().await;
+        let issues = audit_symbols(&spec_symbols, &code_symbols, &locale);
 
         let mut diagnostics = Vec::new();
         let mut line_issues = Vec::new();
@@ -289,18 +303,95 @@ impl Backend {
             }
         } else if let Some(ref spec_path) = spec_path_opt {
             let mut report_content = String::new();
-            report_content.push_str("# 整合性監査レポート (Docs Auditor)\n\n");
-            report_content.push_str("仕様書とコードの整合性検査で以下の不一致が検出されました。各項目を修正してください。\n\n");
-            report_content.push_str("## 不一致項目 (TODO)\n\n");
+            report_content.push_str(&get_message(&MessageKey::ReportTitle, &locale));
+            report_content.push_str(&get_message(&MessageKey::ReportHeader, &locale));
+            report_content.push_str(&get_message(&MessageKey::ReportSectionTitle, &locale));
+
+            let loc = locale.to_lowercase();
+            let is_ja = loc.starts_with("ja");
+            let is_zh_cn = loc.starts_with("zh-cn") || loc.starts_with("zh-hans");
+            let is_zh_tw = loc.starts_with("zh-tw") || loc.starts_with("zh-hk") || loc.starts_with("zh-hant");
+            let is_ko = loc.starts_with("ko");
+            let is_et = loc.starts_with("et");
+            let is_vi = loc.starts_with("vi");
+            let is_es = loc.starts_with("es");
+            let is_fr = loc.starts_with("fr");
+            let is_de = loc.starts_with("de");
 
             for issue in &issues {
                 let issue_type_str = match issue.issue_type {
-                    AuditIssueType::MissingInCode => "コード側定義なし",
-                    AuditIssueType::TypeMismatch => "型ミスマッチ",
-                    AuditIssueType::ParamCountMismatch => "引数個数ミスマッチ",
-                    AuditIssueType::ReturnTypeMismatch => "戻り値ミスマッチ",
-                    AuditIssueType::LineNumberMissing => "行番号未記載",
-                    AuditIssueType::LineNumberMismatch => "行番号ミスマッチ",
+                    AuditIssueType::MissingInCode => {
+                        if is_ja { "コード側定義なし" }
+                        else if is_zh_cn { "代码侧未定义" }
+                        else if is_zh_tw { "程式碼側未定義" }
+                        else if is_ko { "코드 측 정의 없음" }
+                        else if is_et { "Koodis puudub definitsioon" }
+                        else if is_vi { "Thiếu định nghĩa trong mã" }
+                        else if is_es { "Falta definición en código" }
+                        else if is_fr { "Définition manquante dans le code" }
+                        else if is_de { "Fehlende Definition im Code" }
+                        else { "Missing in Code" }
+                    }
+                    AuditIssueType::TypeMismatch => {
+                        if is_ja { "型ミスマッチ" }
+                        else if is_zh_cn { "类型不匹配" }
+                        else if is_zh_tw { "型態不匹配" }
+                        else if is_ko { "타입 불일치" }
+                        else if is_et { "Tüübi lahknevus" }
+                        else if is_vi { "Sai kiểu dữ liệu" }
+                        else if is_es { "Discrepancia de tipo" }
+                        else if is_fr { "Incompatibilité de type" }
+                        else if is_de { "Typkonflikt" }
+                        else { "Type Mismatch" }
+                    }
+                    AuditIssueType::ParamCountMismatch => {
+                        if is_ja { "引数個数ミスマッチ" }
+                        else if is_zh_cn { "参数数量不匹配" }
+                        else if is_zh_tw { "參數數量不匹配" }
+                        else if is_ko { "매개변수 개수 불일치" }
+                        else if is_et { "Parameetrite arvu lahknevus" }
+                        else if is_vi { "Số lượng tham số không khớp" }
+                        else if is_es { "Discrepancia de parámetros" }
+                        else if is_fr { "Incompatibilité du nombre de paramètres" }
+                        else if is_de { "Parameteranzahl-Konflikt" }
+                        else { "Parameter Count Mismatch" }
+                    }
+                    AuditIssueType::ReturnTypeMismatch => {
+                        if is_ja { "戻り値ミスマッチ" }
+                        else if is_zh_cn { "返回值类型不匹配" }
+                        else if is_zh_tw { "傳回值型態不匹配" }
+                        else if is_ko { "반환 타입 불일치" }
+                        else if is_et { "Tagastustüübi lahknevus" }
+                        else if is_vi { "Kiểu trả về không khớp" }
+                        else if is_es { "Discrepancia de tipo de retorno" }
+                        else if is_fr { "Incompatibilité du type de retour" }
+                        else if is_de { "Rückgabetyp-Konflikt" }
+                        else { "Return Type Mismatch" }
+                    }
+                    AuditIssueType::LineNumberMissing => {
+                        if is_ja { "行番号未記載" }
+                        else if is_zh_cn { "行号未填写" }
+                        else if is_zh_tw { "行號未填寫" }
+                        else if is_ko { "라인 번호 누락" }
+                        else if is_et { "Reanumber puudub" }
+                        else if is_vi { "Chưa ghi số dòng" }
+                        else if is_es { "Falta número de línea" }
+                        else if is_fr { "Numéro de ligne manquant" }
+                        else if is_de { "Zeilennummer fehlt" }
+                        else { "Line Number Missing" }
+                    }
+                    AuditIssueType::LineNumberMismatch => {
+                        if is_ja { "行番号ミスマッチ" }
+                        else if is_zh_cn { "行号不匹配" }
+                        else if is_zh_tw { "行號不匹配" }
+                        else if is_ko { "라인 번호 불일치" }
+                        else if is_et { "Reanumbri lahknevus" }
+                        else if is_vi { "Số dòng không khớp" }
+                        else if is_es { "Discrepancia de número de línea" }
+                        else if is_fr { "Incompatibilité de numéro de ligne" }
+                        else if is_de { "Zeilennummern-Konflikt" }
+                        else { "Line Number Mismatch" }
+                    }
                 };
 
                 let spec_relative = spec_path.strip_prefix(&root_path)
@@ -413,6 +504,7 @@ async fn main() {
         client,
         state: Arc::new(Mutex::new(Hfsm::new())),
         root_path: Arc::new(Mutex::new(None)),
+        locale: Arc::new(Mutex::new("en".to_string())),
     });
 
     Server::new(stdin, stdout, messages).serve(service).await;

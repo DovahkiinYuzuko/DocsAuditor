@@ -33,26 +33,29 @@
 - **引数**:
   - `spec_symbols: &[SymbolInfo]` - 仕様書から抽出されたシンボルのリスト。
   - `code_symbols: &[SymbolInfo]` - コードから抽出されたシンボルのリスト。
+  - `locale: &str` - クライアントから受信したロケール文字列。
 - **戻り値**: `Vec<AuditIssue>`
 - **説明**:
   - `spec_symbols` を一つずつ走査し、同じ名前を持つシンボルを `code_symbols` から探索する。
-  - **名前が見つからない場合**: `MissingInCode` エラーを生成する。
+  - **名前が見つからない場合**: `MissingInCode` エラーを生成し、`i18n::get_message` を用いて多言語化されたメッセージを設定する。
   - **名前が見つかった場合**:
-    - 変数/関数種別の一致を確認。
+    - 変数/関数種別の一致を確認。不一致がある場合は `TypeMismatch` を生成。
     - 仕様書に引数の型や数が明記されている場合、コード側の引数情報と突き合わせ、不一致があれば `ParamCountMismatch` や `TypeMismatch` を生成。
     - 仕様書に戻り値の型が明記されている場合、コード側と照合し `ReturnTypeMismatch` を生成。
     - 変数の型が明記されている場合、コード側と照合し `TypeMismatch` を生成。
     - 仕様書内の行番号指定 `(L10-20)` と実際のASTコード行番号範囲を比較する：
       - 未記載の場合: `LineNumberMissing` エラーを生成。
       - ズレている場合: `LineNumberMismatch` エラーを生成。
+    - すべてのエラーについて、`i18n::get_message` を用いて `locale` に応じた警告メッセージを設定する。
 
 ## 依存関係マッピング (Dependency Mapping)
 
 ```mermaid
 graph TD
     audit_symbols --> AuditIssue
+    audit_symbols --> i18n::get_message
     AuditIssue --> AuditIssueType
 ```
 
 ## 影響範囲 (Impact Scope)
-- 新規追加ファイルのため、既存ファイルへの影響なし。
+- `server/src/auditor.rs` 内の `audit_symbols` 関数のシグネチャ変更に伴い、これを呼び出す `server/src/main.rs` の `on_change` ハンドラおよび `auditor.rs` 自体のテストコードに修正が必要。

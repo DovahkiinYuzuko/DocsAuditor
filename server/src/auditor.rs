@@ -1,4 +1,5 @@
 use crate::parser::{SymbolInfo, SymbolKind};
+use crate::i18n::{get_message, MessageKey};
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AuditIssueType {
@@ -20,7 +21,7 @@ pub struct AuditIssue {
     pub expected_line_range: Option<(usize, usize)>,
 }
 
-pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -> Vec<AuditIssue> {
+pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], locale: &str) -> Vec<AuditIssue> {
     let mut issues = Vec::new();
 
     for spec in spec_symbols {
@@ -35,7 +36,7 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                 issues.push(AuditIssue {
                     name: spec.name.clone(),
                     issue_type: AuditIssueType::MissingInCode,
-                    message: format!("仕様書に記載されているシンボル '{}' がコード内に見つかりません。", spec.name),
+                    message: get_message(&MessageKey::MissingInCode(spec.name.clone()), locale),
                     spec_line,
                     code_line_range: None,
                     expected_line_range: spec.line_range,
@@ -47,9 +48,13 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                     issues.push(AuditIssue {
                         name: spec.name.clone(),
                         issue_type: AuditIssueType::TypeMismatch,
-                        message: format!(
-                            "シンボル '{}' の種類が一致しません。仕様書: {:?}, コード: {:?}",
-                            spec.name, spec.kind, code.kind
+                        message: get_message(
+                            &MessageKey::KindMismatch(
+                                spec.name.clone(),
+                                format!("{:?}", spec.kind),
+                                format!("{:?}", code.kind),
+                            ),
+                            locale,
                         ),
                         spec_line,
                         code_line_range: code.line_range,
@@ -67,9 +72,13 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                                 issues.push(AuditIssue {
                                     name: spec.name.clone(),
                                     issue_type: AuditIssueType::ParamCountMismatch,
-                                    message: format!(
-                                        "関数 '{}' の引数の個数が一致しません。仕様書: {}個, コード: {}個",
-                                        spec.name, spec_params.len(), code_params.len()
+                                    message: get_message(
+                                        &MessageKey::ParamCountMismatch(
+                                            spec.name.clone(),
+                                            spec_params.len(),
+                                            code_params.len(),
+                                        ),
+                                        locale,
                                     ),
                                     spec_line,
                                     code_line_range: code.line_range,
@@ -83,9 +92,14 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                                         issues.push(AuditIssue {
                                             name: spec.name.clone(),
                                             issue_type: AuditIssueType::TypeMismatch,
-                                            message: format!(
-                                                "関数 '{}' の引数 '{}' の型が一致しません。仕様書: {}, コード: {}",
-                                                spec.name, s_name, s_type, c_type
+                                            message: get_message(
+                                                &MessageKey::TypeMismatch(
+                                                    spec.name.clone(),
+                                                    s_name.clone(),
+                                                    s_type.clone(),
+                                                    c_type.clone(),
+                                                ),
+                                                locale,
                                             ),
                                             spec_line,
                                             code_line_range: code.line_range,
@@ -105,9 +119,13 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                                 issues.push(AuditIssue {
                                     name: spec.name.clone(),
                                     issue_type: AuditIssueType::ReturnTypeMismatch,
-                                    message: format!(
-                                        "関数 '{}' の戻り値の型が一致しません。仕様書: {}, コード: {}",
-                                        spec.name, spec_ret, code_ret
+                                    message: get_message(
+                                        &MessageKey::ReturnTypeMismatch(
+                                            spec.name.clone(),
+                                            spec_ret.clone(),
+                                            code_ret.to_string(),
+                                        ),
+                                        locale,
                                     ),
                                     spec_line,
                                     code_line_range: code.line_range,
@@ -125,9 +143,13 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                                     issues.push(AuditIssue {
                                         name: spec.name.clone(),
                                         issue_type: AuditIssueType::TypeMismatch,
-                                        message: format!(
-                                            "変数 '{}' の型が一致しません。仕様書: {}, コード: {}",
-                                            spec.name, spec_type, code_type
+                                        message: get_message(
+                                            &MessageKey::VarTypeMismatch(
+                                                spec.name.clone(),
+                                                spec_type.clone(),
+                                                code_type.clone(),
+                                            ),
+                                            locale,
                                         ),
                                         spec_line,
                                         code_line_range: code.line_range,
@@ -146,7 +168,10 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                         issues.push(AuditIssue {
                             name: spec.name.clone(),
                             issue_type: AuditIssueType::LineNumberMissing,
-                            message: format!("仕様書にシンボル '{}' の行番号が記載されていません。", spec.name),
+                            message: get_message(
+                                &MessageKey::LineNumberMissing(spec.name.clone()),
+                                locale,
+                            ),
                             spec_line,
                             code_line_range: code.line_range,
                             expected_line_range: None,
@@ -159,9 +184,13 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo]) -
                                 issues.push(AuditIssue {
                                     name: spec.name.clone(),
                                     issue_type: AuditIssueType::LineNumberMismatch,
-                                    message: format!(
-                                        "仕様書に記載されている行番号範囲 (L{}-{}) が実際のコードの行範囲 (L{}-{}) と一致しません。",
-                                        spec_range.0, spec_range.1, code_range.0, code_range.1
+                                    message: get_message(
+                                        &MessageKey::LineNumberMismatch(
+                                            spec.name.clone(),
+                                            format!("L{}-{}", spec_range.0, spec_range.1),
+                                            format!("L{}-{}", code_range.0, code_range.1),
+                                        ),
+                                        locale,
                                     ),
                                     spec_line,
                                     code_line_range: Some(code_range),
@@ -208,7 +237,7 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code);
+        let issues = audit_symbols(&spec, &code, "ja");
         assert!(issues.is_empty());
     }
 
@@ -227,7 +256,7 @@ mod tests {
         ];
         let code = vec![];
 
-        let issues = audit_symbols(&spec, &code);
+        let issues = audit_symbols(&spec, &code, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::MissingInCode);
         assert_eq!(issues[0].spec_line, 5);
@@ -258,7 +287,7 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code);
+        let issues = audit_symbols(&spec, &code, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::TypeMismatch);
         assert_eq!(issues[0].spec_line, 10);
@@ -289,7 +318,7 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code);
+        let issues = audit_symbols(&spec, &code, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::LineNumberMismatch);
         assert_eq!(issues[0].spec_line, 4);
