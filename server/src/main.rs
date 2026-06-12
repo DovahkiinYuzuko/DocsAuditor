@@ -276,7 +276,49 @@ impl Backend {
 
         self.client.publish_diagnostics(spec_uri.clone(), diagnostics, None).await;
 
-        // 4. 設定の問い合わせ (autoInjection の確認)
+        let spec_path_opt = spec_uri.to_file_path().ok();
+
+        // 4. レポートファイルの自動生成・削除
+        let report_path = root_path.join("variables_functions_audit_report.md");
+        if issues.is_empty() {
+            if report_path.exists() {
+                let _ = tokio::fs::remove_file(&report_path).await;
+            }
+        } else if let Some(ref spec_path) = spec_path_opt {
+            let mut report_content = String::new();
+            report_content.push_str("# 整合性監査レポート (Docs Auditor)\n\n");
+            report_content.push_str("仕様書とコードの整合性検査で以下の不一致が検出されました。各項目を修正してください。\n\n");
+            report_content.push_str("## 不一致項目 (TODO)\n\n");
+
+            for issue in &issues {
+                let issue_type_str = match issue.issue_type {
+                    AuditIssueType::MissingInCode => "コード側定義なし",
+                    AuditIssueType::TypeMismatch => "型ミスマッチ",
+                    AuditIssueType::ParamCountMismatch => "引数個数ミスマッチ",
+                    AuditIssueType::ReturnTypeMismatch => "戻り値ミスマッチ",
+                    AuditIssueType::LineNumberMissing => "行番号未記載",
+                    AuditIssueType::LineNumberMismatch => "行番号ミスマッチ",
+                };
+
+                let spec_relative = spec_path.strip_prefix(&root_path)
+                    .unwrap_or(spec_path)
+                    .to_string_lossy();
+
+                report_content.push_str(&format!(
+                    "- [ ] **{}** (シンボル: `{}`)\n  - **内容**: {}\n  - **仕様書箇所**: [{}](file:///{}) L{}\n",
+                    issue_type_str,
+                    issue.name,
+                    issue.message,
+                    spec_relative,
+                    spec_path.to_string_lossy().replace('\\', "/"),
+                    issue.spec_line
+                ));
+            }
+
+            let _ = tokio::fs::write(&report_path, report_content).await;
+        }
+
+        // 5. 設定の問い合わせ (autoInjection の確認)
         let config_item = ConfigurationItem {
             scope_uri: Some(spec_uri.clone()),
             section: Some("docsAuditor.autoInjection".to_string()),
@@ -291,7 +333,7 @@ impl Backend {
         if auto_injection && !line_issues.is_empty() {
             self.state.lock().await.dispatch(Event::TriggerAutoInjection);
 
-            if let Ok(spec_path) = spec_uri.to_file_path() {
+            if let Some(spec_path) = spec_path_opt {
                 if let Some(_lock) = locker::FileLocker::try_lock(&spec_path) {
                     self.state.lock().await.dispatch(Event::LockAcquired);
 
