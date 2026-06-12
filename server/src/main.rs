@@ -9,6 +9,7 @@ use url::Url;
 mod parser;
 mod state;
 mod auditor;
+mod locker;
 
 use state::hfsm::{Hfsm, Event};
 use auditor::{audit_symbols, AuditIssue, AuditIssueType};
@@ -137,14 +138,15 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn on_change(&self, uri: Url, text: String) {
-        let mut hfsm = self.state.lock().await;
-        hfsm.dispatch(Event::DocumentChanged);
+        {
+            self.state.lock().await.dispatch(Event::DocumentChanged);
+        }
 
-        let root_path_opt = self.root_path.lock().await.clone();
+        let root_path_opt = { self.root_path.lock().await.clone() };
         let root_path = match root_path_opt {
             Some(path) => path,
             None => {
-                hfsm.dispatch(Event::AnalysisCompleted);
+                self.state.lock().await.dispatch(Event::AnalysisCompleted);
                 return;
             }
         };
@@ -152,7 +154,7 @@ impl Backend {
         let file_path = match uri.to_file_path() {
             Ok(p) => p,
             Err(_) => {
-                hfsm.dispatch(Event::AnalysisCompleted);
+                self.state.lock().await.dispatch(Event::AnalysisCompleted);
                 return;
             }
         };
@@ -225,7 +227,7 @@ impl Backend {
         }
 
         if !matched {
-            hfsm.dispatch(Event::AnalysisCompleted);
+            self.state.lock().await.dispatch(Event::AnalysisCompleted);
             return;
         }
 
@@ -235,6 +237,7 @@ impl Backend {
         let issues = audit_symbols(&spec_symbols, &code_symbols);
 
         let mut diagnostics = Vec::new();
+        let mut line_issues = Vec::new();
 
         for issue in &issues {
             let line_num = issue.spec_line.saturating_sub(1) as u32;
@@ -245,7 +248,10 @@ impl Backend {
             let severity = match issue.issue_type {
                 AuditIssueType::MissingInCode => DiagnosticSeverity::ERROR,
                 AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch => DiagnosticSeverity::WARNING,
-                AuditIssueType::LineNumberMissing | AuditIssueType::LineNumberMismatch => DiagnosticSeverity::HINT,
+                AuditIssueType::LineNumberMissing | AuditIssueType::LineNumberMismatch => {
+                    line_issues.push(issue.clone());
+                    DiagnosticSeverity::HINT
+                }
             };
 
             let diagnostic_data = serde_json::to_value(issue).ok();
@@ -268,9 +274,58 @@ impl Backend {
             diagnostics.push(d);
         }
 
-        self.client.publish_diagnostics(spec_uri, diagnostics, None).await;
+        self.client.publish_diagnostics(spec_uri.clone(), diagnostics, None).await;
 
-        hfsm.dispatch(Event::AnalysisCompleted);
+        // 4. 設定の問い合わせ (autoInjection の確認)
+        let config_item = ConfigurationItem {
+            scope_uri: Some(spec_uri.clone()),
+            section: Some("docsAuditor.autoInjection".to_string()),
+        };
+        let mut auto_injection = false;
+        if let Ok(configs) = self.client.configuration(vec![config_item]).await {
+            if let Some(val) = configs.first() {
+                auto_injection = val.as_bool().unwrap_or(false);
+            }
+        }
+
+        if auto_injection && !line_issues.is_empty() {
+            self.state.lock().await.dispatch(Event::TriggerAutoInjection);
+
+            if let Ok(spec_path) = spec_uri.to_file_path() {
+                if let Some(_lock) = locker::FileLocker::try_lock(&spec_path) {
+                    self.state.lock().await.dispatch(Event::LockAcquired);
+
+                    let mut updated_lines: Vec<String> = spec_text.lines().map(|s| s.to_string()).collect();
+
+                    for issue in line_issues {
+                        let line_idx = issue.spec_line.saturating_sub(1);
+                        if line_idx < updated_lines.len() {
+                            let line = &updated_lines[line_idx];
+                            if let Some(code_range) = issue.code_line_range {
+                                let line_regex = regex::Regex::new(r"\s*\(L\d+(?:-\d+)?\)\s*$").unwrap();
+                                let clean_line = line_regex.replace(line, "").trim_end().to_string();
+                                let updated_line = format!("{} (L{}-{})", clean_line, code_range.0, code_range.1);
+                                updated_lines[line_idx] = updated_line;
+                            }
+                        }
+                    }
+
+                    let new_spec_content = updated_lines.join("\n");
+                    if tokio::fs::write(&spec_path, new_spec_content).await.is_ok() {
+                        self.state.lock().await.dispatch(Event::WriteCompleted);
+                        self.state.lock().await.dispatch(Event::LockReleased);
+                    } else {
+                        self.state.lock().await.dispatch(Event::WriteError);
+                        self.state.lock().await.dispatch(Event::RecoveryCompleted);
+                    }
+                } else {
+                    self.state.lock().await.dispatch(Event::LockFailed);
+                    self.state.lock().await.dispatch(Event::RecoveryCompleted);
+                }
+            }
+        } else {
+            self.state.lock().await.dispatch(Event::AnalysisCompleted);
+        }
     }
 }
 
