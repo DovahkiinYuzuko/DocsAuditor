@@ -7,6 +7,7 @@
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": [
+        "--profile-temp",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}"
       ],

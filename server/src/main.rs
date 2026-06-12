@@ -138,6 +138,9 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn on_change(&self, uri: Url, text: String) {
+        // デバッグ用の一時的no-op化
+        return;
+
         {
             self.state.lock().await.dispatch(Event::DocumentChanged);
         }
@@ -398,6 +401,11 @@ async fn find_file_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {
 
 #[tokio::main]
 async fn main() {
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("[Docs Auditor Server Panic] {}", info);
+        std::process::exit(1);
+    }));
+
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
