@@ -9,6 +9,10 @@
 !LICENSE
 !NOTICE.md
 
+# VS Code 設定
+!.vscode/
+!.vscode/**
+
 # 仕様書ドキュメント
 !docs/
 !docs/**
