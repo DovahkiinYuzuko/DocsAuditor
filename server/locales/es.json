@@ -10,5 +10,6 @@
   "report_title": "# Informe de auditoría de coherencia (Docs Auditor)\n\n",
   "report_header": "Se detectaron las siguientes incoherencias entre las especificaciones y el código. Por favor, corrija cada elemento.\n\n",
   "report_section_title": "## Elementos incoherentes (TODO)\n\n",
-  "code_action_title": "Agregar automáticamente los números de línea {0} a la especificación"
+  "code_action_title": "Agregar automáticamente los números de línea {0} a la especificación",
+  "dependency_not_used": "La dependencia '{1}' definida en la especificación no se utiliza en el símbolo '{0}'."
 }

@@ -9,6 +9,7 @@ pub enum AuditIssueType {
     ReturnTypeMismatch,
     LineNumberMissing,
     LineNumberMismatch,
+    DependencyNotUsed,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -200,6 +201,37 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], l
                         }
                     }
                 }
+
+                // 4. 依存関係のチェック
+                if let Some(ref deps) = spec.dependencies {
+                    for dep in deps {
+                        let has_dep = if let Some(ref used) = code.used_symbols {
+                            used.contains(dep) || {
+                                if let Some(last_part) = dep.split("::").last() {
+                                    used.contains(&last_part.to_string())
+                                } else {
+                                    false
+                                }
+                            }
+                        } else {
+                            false
+                        };
+
+                        if !has_dep {
+                            issues.push(AuditIssue {
+                                name: spec.name.clone(),
+                                issue_type: AuditIssueType::DependencyNotUsed,
+                                message: get_message(
+                                    &MessageKey::DependencyNotUsed(spec.name.clone(), dep.clone()),
+                                    locale,
+                                ),
+                                spec_line,
+                                code_line_range: code.line_range,
+                                expected_line_range: None,
+                            });
+                        }
+                    }
+                }
             }
         }
     }
@@ -211,6 +243,7 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], l
 mod tests {
     use super::*;
     use crate::parser::SymbolKind;
+    use crate::parser::SymbolInfo;
 
     #[test]
     fn test_audit_symbols_success() {
@@ -223,6 +256,8 @@ mod tests {
                 var_type: None,
                 line_range: Some((10, 20)),
                 spec_line: Some(2),
+                dependencies: None,
+                used_symbols: None,
             }
         ];
         let code = vec![
@@ -234,6 +269,8 @@ mod tests {
                 var_type: None,
                 line_range: Some((10, 20)),
                 spec_line: None,
+                dependencies: None,
+                used_symbols: None,
             }
         ];
 
@@ -252,6 +289,8 @@ mod tests {
                 var_type: None,
                 line_range: None,
                 spec_line: Some(5),
+                dependencies: None,
+                used_symbols: None,
             }
         ];
         let code = vec![];
@@ -273,6 +312,8 @@ mod tests {
                 var_type: Some("u64".to_string()),
                 line_range: Some((30, 30)),
                 spec_line: Some(10),
+                dependencies: None,
+                used_symbols: None,
             }
         ];
         let code = vec![
@@ -284,6 +325,8 @@ mod tests {
                 var_type: Some("u32".to_string()),
                 line_range: Some((30, 30)),
                 spec_line: None,
+                dependencies: None,
+                used_symbols: None,
             }
         ];
 
@@ -304,6 +347,8 @@ mod tests {
                 var_type: None,
                 line_range: Some((10, 20)),
                 spec_line: Some(4),
+                dependencies: None,
+                used_symbols: None,
             }
         ];
         let code = vec![
@@ -315,6 +360,8 @@ mod tests {
                 var_type: None,
                 line_range: Some((15, 25)),
                 spec_line: None,
+                dependencies: None,
+                used_symbols: None,
             }
         ];
 
@@ -322,5 +369,73 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::LineNumberMismatch);
         assert_eq!(issues[0].spec_line, 4);
+    }
+
+    #[test]
+    fn test_audit_symbols_dependency_success() {
+        let spec = vec![
+            SymbolInfo {
+                name: "on_change".to_string(),
+                kind: SymbolKind::Function,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: Some((1, 10)),
+                spec_line: Some(5),
+                dependencies: Some(vec!["parser::parse_markdown_spec".to_string()]),
+                used_symbols: None,
+            }
+        ];
+        let code = vec![
+            SymbolInfo {
+                name: "on_change".to_string(),
+                kind: SymbolKind::Function,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: Some((1, 10)),
+                spec_line: None,
+                dependencies: None,
+                used_symbols: Some(vec!["parse_markdown_spec".to_string()]),
+            }
+        ];
+
+        let issues = audit_symbols(&spec, &code, "ja");
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn test_audit_symbols_dependency_failed() {
+        let spec = vec![
+            SymbolInfo {
+                name: "on_change".to_string(),
+                kind: SymbolKind::Function,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: Some((1, 10)),
+                spec_line: Some(5),
+                dependencies: Some(vec!["parser::parse_markdown_spec".to_string()]),
+                used_symbols: None,
+            }
+        ];
+        let code = vec![
+            SymbolInfo {
+                name: "on_change".to_string(),
+                kind: SymbolKind::Function,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: Some((1, 10)),
+                spec_line: None,
+                dependencies: None,
+                used_symbols: Some(vec!["another_function".to_string()]),
+            }
+        ];
+
+        let issues = audit_symbols(&spec, &code, "ja");
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].issue_type, AuditIssueType::DependencyNotUsed);
+        assert_eq!(issues[0].spec_line, 5);
     }
 }

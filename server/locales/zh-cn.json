@@ -10,5 +10,6 @@
   "report_title": "# 一致性审计报告 (Docs Auditor)\n\n",
   "report_header": "检测到规范与代码之间存在以下不一致。请修正每个项目。\n\n",
   "report_section_title": "## 不一致项目 (TODO)\n\n",
-  "code_action_title": "自动向规范追加行号 {0}"
+  "code_action_title": "自动向规范追加行号 {0}",
+  "dependency_not_used": "在符号 '{0}' 中未使用规格书中定义的依赖项 '{1}'。"
 }

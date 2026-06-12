@@ -16,17 +16,18 @@ pub struct SymbolInfo {
     pub var_type: Option<String>,
     pub line_range: Option<(usize, usize)>, // (start_line, end_line) - 1-indexed
     pub spec_line: Option<usize>,           // 仕様書内での定義物理行番号（1-indexed）
+    pub dependencies: Option<Vec<String>>,  // 仕様書側: 依存先リスト
+    pub used_symbols: Option<Vec<String>>,  // コード側: 使用識別子リスト
 }
 
 pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
     let mut symbols = Vec::new();
     
-    // 行ベースで解析して仕様書の物理行番号を正確に特定する
+    // 1. 変数や関数の宣言情報を抽出する
     for (idx, line) in content.lines().enumerate() {
         let physical_line = idx + 1;
         let trimmed = line.trim();
         
-        // 箇条書き（- または *）で始まる行を解析対象とする
         if trimmed.starts_with('-') || trimmed.starts_with('*') {
             let item_content = trimmed[1..].trim();
             if let Some(mut sym) = parse_spec_line(item_content) {
@@ -35,6 +36,42 @@ pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
             }
         }
     }
+
+    // 2. Mermaid図から依存関係を抽出する
+    let mut in_mermaid = false;
+    let mermaid_regex = Regex::new(r"^\s*(\w+)(?:\[.*?\])?\s*-->\s*([\w:]+)(?:\[.*?\])?").unwrap();
+    
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```mermaid") {
+            in_mermaid = true;
+            continue;
+        } else if in_mermaid && trimmed.starts_with("```") {
+            in_mermaid = false;
+            continue;
+        }
+
+        if in_mermaid {
+            if let Some(caps) = mermaid_regex.captures(trimmed) {
+                let caller = caps.get(1).unwrap().as_str().to_string();
+                let callee = caps.get(2).unwrap().as_str().to_string();
+                
+                for sym in &mut symbols {
+                    if sym.name == caller {
+                        if sym.dependencies.is_none() {
+                            sym.dependencies = Some(Vec::new());
+                        }
+                        if let Some(ref mut deps) = sym.dependencies {
+                            if !deps.contains(&callee) {
+                                deps.push(callee.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     symbols
 }
 
@@ -89,6 +126,8 @@ fn parse_spec_line(line: &str) -> Option<SymbolInfo> {
             var_type: None,
             line_range,
             spec_line: None,
+            dependencies: None,
+            used_symbols: None,
         });
     }
 
@@ -106,6 +145,8 @@ fn parse_spec_line(line: &str) -> Option<SymbolInfo> {
             var_type,
             line_range,
             spec_line: None,
+            dependencies: None,
+            used_symbols: None,
         });
     }
 
@@ -153,6 +194,28 @@ fn walk_rust_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
     }
 }
 
+fn collect_used_symbols(node: Node, source: &str, used: &mut std::collections::HashSet<String>) {
+    let kind = node.kind();
+    if kind == "identifier" || kind == "type_identifier" || kind == "scoped_identifier" || kind == "field_identifier" {
+        if let Ok(text) = node.utf8_text(source.as_bytes()) {
+            let t = text.trim().to_string();
+            if !t.is_empty() {
+                used.insert(t);
+            }
+        }
+    }
+    
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            collect_used_symbols(cursor.node(), source, used);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
 fn extract_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
     let name_node = node.child_by_field_name("name")?;
     let name = name_node.utf8_text(source.as_bytes()).ok()?.to_string();
@@ -186,6 +249,11 @@ fn extract_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
         .and_then(|n| n.utf8_text(source.as_bytes()).ok())
         .map(|t| t.trim().trim_start_matches("->").trim().to_string());
 
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
     Some(SymbolInfo {
         name,
         kind: SymbolKind::Function,
@@ -194,6 +262,8 @@ fn extract_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
         var_type: None,
         line_range: Some((start_line, end_line)),
         spec_line: None,
+        dependencies: None,
+        used_symbols,
     })
 }
 
@@ -208,6 +278,11 @@ fn extract_variable_info(node: Node, source: &str) -> Option<SymbolInfo> {
         .and_then(|n| n.utf8_text(source.as_bytes()).ok())
         .map(|t| t.trim().to_string());
 
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
     Some(SymbolInfo {
         name,
         kind: SymbolKind::Variable,
@@ -216,6 +291,8 @@ fn extract_variable_info(node: Node, source: &str) -> Option<SymbolInfo> {
         var_type,
         line_range: Some((start_line, end_line)),
         spec_line: None,
+        dependencies: None,
+        used_symbols,
     })
 }
 
@@ -229,6 +306,12 @@ mod tests {
 - fn hello(user: String) -> Result (L10-20)
 - let timeout: u64 (L30)
 - invalid item without fn or let
+
+```mermaid
+graph TD
+    hello --> parser::parse_markdown_spec
+    hello --> Hfsm
+```
 "#;
         let symbols = parse_markdown_spec(md);
         assert_eq!(symbols.len(), 2);
@@ -240,6 +323,7 @@ mod tests {
         assert_eq!(symbols[0].return_type, Some("Result".to_string()));
         assert_eq!(symbols[0].line_range, Some((10, 20)));
         assert_eq!(symbols[0].spec_line, Some(2)); // 2行目
+        assert_eq!(symbols[0].dependencies, Some(vec!["parser::parse_markdown_spec".to_string(), "Hfsm".to_string()]));
 
         // 2つ目のシンボル (Variable)
         assert_eq!(symbols[1].name, "timeout");

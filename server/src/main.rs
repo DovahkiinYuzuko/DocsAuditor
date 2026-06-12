@@ -264,7 +264,7 @@ impl Backend {
 
             let severity = match issue.issue_type {
                 AuditIssueType::MissingInCode => DiagnosticSeverity::ERROR,
-                AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch => DiagnosticSeverity::WARNING,
+                AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch | AuditIssueType::DependencyNotUsed => DiagnosticSeverity::WARNING,
                 AuditIssueType::LineNumberMissing | AuditIssueType::LineNumberMismatch => {
                     line_issues.push(issue.clone());
                     DiagnosticSeverity::HINT
@@ -391,6 +391,18 @@ impl Backend {
                         else if is_fr { "Incompatibilité de numéro de ligne" }
                         else if is_de { "Zeilennummern-Konflikt" }
                         else { "Line Number Mismatch" }
+                    }
+                    AuditIssueType::DependencyNotUsed => {
+                        if is_ja { "依存先未使用" }
+                        else if is_zh_cn { "依赖项未使用" }
+                        else if is_zh_tw { "依賴項未使用" }
+                        else if is_ko { "의존성 미사용" }
+                        else if is_et { "Kasutamata sõltuvus" }
+                        else if is_vi { "Phụ thuộc chưa dùng" }
+                        else if is_es { "Dependencia no utilizada" }
+                        else if is_fr { "Dépendance non utilisée" }
+                        else if is_de { "Abhängigkeit nicht verwendet" }
+                        else { "Dependency Not Used" }
                     }
                 };
 

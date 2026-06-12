@@ -10,5 +10,6 @@
   "report_title": "# Konsistenzprüfungsbericht (Docs Auditor)\n\n",
   "report_header": "Die folgenden Unstimmigkeiten zwischen den Spezifikationen und dem Code wurden festgestellt. Bitte korrigieren Sie jedes Element.\n\n",
   "report_section_title": "## Unstimmige Elemente (TODO)\n\n",
-  "code_action_title": "Zeilennummern {0} automatisch an Spezifikation anhängen"
+  "code_action_title": "Zeilennummern {0} automatisch an Spezifikation anhängen",
+  "dependency_not_used": "Die in der Spezifikation definierte Abhängigkeit '{1}' wird im Symbol '{0}' nicht verwendet."
 }

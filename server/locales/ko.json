@@ -10,5 +10,6 @@
   "report_title": "# 일관성 감사 보고서 (Docs Auditor)\n\n",
   "report_header": "명세서와 코드 간의 일치하지 않는 항목들이 감지되었습니다. 각 항목을 수정해 주세요.\n\n",
   "report_section_title": "## 일치하지 않는 항목 (TODO)\n\n",
-  "code_action_title": "명세서에 라인 번호 {0}를 자동으로 추가"
+  "code_action_title": "명세서에 라인 번호 {0}를 자동으로 추가",
+  "dependency_not_used": "명세서에 정의된 의존성 '{1}'이(가) 심볼 '{0}'에서 사용되지 않았습니다."
 }

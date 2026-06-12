@@ -16,6 +16,7 @@
 - `ReturnTypeMismatch` - 関数の戻り値型が一致しない。
 - `LineNumberMissing` - 仕様書に行番号が記載されていない。
 - `LineNumberMismatch` - 仕様書に記載されている行番号が、実際のコード上の行番号と一致しない。
+- `DependencyNotUsed` - 仕様書に記載された依存先が、コード内で呼び出されていない。
 
 ### `AuditIssue` (構造体)
 監査で検出された不一致情報。
@@ -46,6 +47,8 @@
     - 仕様書内の行番号指定 `(L10-20)` と実際のASTコード行番号範囲を比較する：
       - 未記載の場合: `LineNumberMissing` エラーを生成。
       - ズレている場合: `LineNumberMismatch` エラーを生成。
+    - 仕様書内の依存関係マッピングを実際のコード内の使用識別子と比較する：
+      - 使用されていない依存先がある場合: `DependencyNotUsed` エラーを生成。
     - すべてのエラーについて、`i18n::get_message` を用いて `locale` に応じた警告メッセージを設定する。
 
 ## 依存関係マッピング (Dependency Mapping)

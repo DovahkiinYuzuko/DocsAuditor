@@ -10,5 +10,6 @@
   "report_title": "# Báo cáo Kiểm toán Tính nhất quán (Docs Auditor)\n\n",
   "report_header": "Phát hiện các điểm không nhất quán sau đây giữa đặc tả và mã nguồn. Vui lòng sửa lại từng mục.\n\n",
   "report_section_title": "## Các mục không nhất quán (TODO)\n\n",
-  "code_action_title": "Tự động thêm số dòng {0} vào đặc tả"
+  "code_action_title": "Tự động thêm số dòng {0} vào đặc tả",
+  "dependency_not_used": "Phụ thuộc '{1}' được xác định trong đặc tả không được sử dụng trong ký hiệu '{0}'."
 }

@@ -18,6 +18,7 @@ LSPサーバーが出力する警告（Diagnostics）、コードアクション
   - `ReturnTypeMismatch(String, String, String)` - 戻り値の型が不一致の場合（関数名, 仕様書の型, コードの型）
   - `LineNumberMissing(String)` - 行番号未記載（シンボル名）
   - `LineNumberMismatch(String, String, String)` - 行番号不一致（シンボル名, 仕様書の行, コードの行）
+  - `DependencyNotUsed(String, String)` - 仕様書の依存先がコード内で使用されていない場合（関数名, 依存先名）
   - `ReportTitle` - 整合性監査レポートのタイトル
   - `ReportHeader` - 整合性監査レポートのヘッダーメッセージ
   - `ReportSectionTitle` - 整合性監査レポートのTODOセクションタイトル
