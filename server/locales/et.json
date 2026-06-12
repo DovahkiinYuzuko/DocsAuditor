@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "Spetsifikatsioonis märgitud sümbol '{0}' puudub koodist.",
+  "kind_mismatch": "Sümboli '{0}' tüüp ei kattu. Spetsifikatsioon: {1}, Kood: {2}",
+  "type_mismatch": "Parameetri '{1}' tüüpide lahknevus funktsioonis '{0}'. Spetsifikatsioon: {2}, Kood: {3}",
+  "var_type_mismatch": "Muutuja '{0}' tüüpide lahknevus. Spetsifikatsioon: {1}, Kood: {2}",
+  "param_count_mismatch": "Parameetrite arvu lahknevus funktsioonis '{0}'. Spetsifikatsioon: {1}, Kood: {2}",
+  "return_type_mismatch": "Tagastustüübi lahknevus funktsioonis '{0}'. Spetsifikatsioon: {1}, Kood: {2}",
+  "line_number_missing": "Sümboli '{0}' reanumber puudub spetsifikatsioonist.",
+  "line_number_mismatch": "Sümboli '{0}' reanumbrite lahknevus. Spetsifikatsioon: {1}, Kood: {2}",
+  "report_title": "# Kooskõla auditi aruanne (Docs Auditor)\n\n",
+  "report_header": "Tuvastati järgmised lahknevused spetsifikatsioonide ja koodi vahel. Palun parandage iga punkt.\n\n",
+  "report_section_title": "## Lahknevused (TODO)\n\n",
+  "code_action_title": "Lisa reanumbrid {0} automaatselt spetsifikatsioonile"
+}

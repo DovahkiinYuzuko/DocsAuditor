@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "Falta en el código el símbolo '{0}' documentado en las especificaciones.",
+  "kind_mismatch": "El tipo de símbolo '{0}' no coincide. Espec: {1}, Código: {2}",
+  "type_mismatch": "Discrepancia de tipo para el parámetro '{1}' en la función '{0}'. Espec: {2}, Código: {3}",
+  "var_type_mismatch": "Discrepancia de tipo para la variable '{0}'. Espec: {1}, Código: {2}",
+  "param_count_mismatch": "Discrepancia en el número de parámetros para la función '{0}'. Espec: {1}, Código: {2}",
+  "return_type_mismatch": "Discrepancia en el tipo de retorno para la función '{0}'. Espec: {1}, Código: {2}",
+  "line_number_missing": "Falta el número de línea para el símbolo '{0}' en la especificación.",
+  "line_number_mismatch": "Discrepancia en el número de línea para el símbolo '{0}'. Espec: {1}, Código: {2}",
+  "report_title": "# Informe de auditoría de coherencia (Docs Auditor)\n\n",
+  "report_header": "Se detectaron las siguientes incoherencias entre las especificaciones y el código. Por favor, corrija cada elemento.\n\n",
+  "report_section_title": "## Elementos incoherentes (TODO)\n\n",
+  "code_action_title": "Agregar automáticamente los números de línea {0} a la especificación"
+}

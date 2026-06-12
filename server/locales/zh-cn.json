@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "规范中记录的符号 '{0}' 在代码中缺失。",
+  "kind_mismatch": "符号 '{0}' 的类型不匹配。规范: {1}, 代码: {2}",
+  "type_mismatch": "函数 '{0}' 中的参数 '{1}' 类型不匹配。规范: {2}, 代码: {3}",
+  "var_type_mismatch": "变量 '{0}' 的类型不匹配。规范: {1}, 代码: {2}",
+  "param_count_mismatch": "函数 '{0}' 的参数数量不匹配。规范: {1}, 代码: {2}",
+  "return_type_mismatch": "函数 '{0}' 的返回值类型不匹配。规范: {1}, 代码: {2}",
+  "line_number_missing": "规范中缺少符号 '{0}' 的行号。",
+  "line_number_mismatch": "符号 '{0}' 的行号不匹配。规范: {1}, 代码: {2}",
+  "report_title": "# 一致性审计报告 (Docs Auditor)\n\n",
+  "report_header": "检测到规范与代码之间存在以下不一致。请修正每个项目。\n\n",
+  "report_section_title": "## 不一致项目 (TODO)\n\n",
+  "code_action_title": "自动向规范追加行号 {0}"
+}

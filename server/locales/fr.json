@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "Le symbole '{0}' documenté dans les spécifications est manquant dans le code.",
+  "kind_mismatch": "Le type de symbole '{0}' ne correspond pas. Spéc: {1}, Code: {2}",
+  "type_mismatch": "Incompatibilité de type pour le paramètre '{1}' dans la fonction '{0}'. Spéc: {2}, Code: {3}",
+  "var_type_mismatch": "Incompatibilité de type pour la variable '{0}'. Spéc: {1}, Code: {2}",
+  "param_count_mismatch": "Incompatibilité du nombre de paramètres pour la fonction '{0}'. Spéc: {1}, Code: {2}",
+  "return_type_mismatch": "Incompatibilité du type de retour pour la fonction '{0}'. Spéc: {1}, Code: {2}",
+  "line_number_missing": "Le numéro de ligne pour le symbole '{0}' est manquant dans la spécification.",
+  "line_number_mismatch": "Incompatibilité de numéro de ligne pour le symbole '{0}'. Spéc: {1}, Code: {2}",
+  "report_title": "# Rapport d'audit de cohérence (Docs Auditor)\n\n",
+  "report_header": "Les incohérences suivantes entre les spécifications et le code ont été détectées. Veuillez corriger chaque élément.\n\n",
+  "report_section_title": "## Éléments incohérents (TODO)\n\n",
+  "code_action_title": "Ajouter automatiquement les numéros de ligne {0} à la spécification"
+}

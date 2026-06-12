@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "Ký hiệu '{0}' được mô tả trong đặc tả bị thiếu trong mã nguồn.",
+  "kind_mismatch": "Loại của ký hiệu '{0}' không khớp. Đặc tả: {1}, Mã nguồn: {2}",
+  "type_mismatch": "Kiểu dữ liệu của tham số '{1}' trong hàm '{0}' không khớp. Đặc tả: {2}, Mã nguồn: {3}",
+  "var_type_mismatch": "Kiểu dữ liệu của biến '{0}' không khớp. Đặc tả: {1}, Mã nguồn: {2}",
+  "param_count_mismatch": "Số lượng tham số của hàm '{0}' không khớp. Đặc tả: {1}, Mã nguồn: {2}",
+  "return_type_mismatch": "Kiểu trả về của hàm '{0}' không khớp. Đặc tả: {1}, Mã nguồn: {2}",
+  "line_number_missing": "Thiếu số dòng cho ký hiệu '{0}' trong đặc tả.",
+  "line_number_mismatch": "Số dòng của ký hiệu '{0}' không khớp. Đặc tả: {1}, Mã nguồn: {2}",
+  "report_title": "# Báo cáo Kiểm toán Tính nhất quán (Docs Auditor)\n\n",
+  "report_header": "Phát hiện các điểm không nhất quán sau đây giữa đặc tả và mã nguồn. Vui lòng sửa lại từng mục.\n\n",
+  "report_section_title": "## Các mục không nhất quán (TODO)\n\n",
+  "code_action_title": "Tự động thêm số dòng {0} vào đặc tả"
+}

@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "Symbol '{0}' documented in specifications is missing in the code.",
+  "kind_mismatch": "Symbol kind mismatch for '{0}'. Spec: {1}, Code: {2}",
+  "type_mismatch": "Type mismatch for parameter '{1}' in function '{0}'. Spec: {2}, Code: {3}",
+  "var_type_mismatch": "Type mismatch for variable '{0}'. Spec: {1}, Code: {2}",
+  "param_count_mismatch": "Parameter count mismatch for function '{0}'. Spec: {1}, Code: {2}",
+  "return_type_mismatch": "Return type mismatch for function '{0}'. Spec: {1}, Code: {2}",
+  "line_number_missing": "Line number for symbol '{0}' is missing in the specification.",
+  "line_number_mismatch": "Line number mismatch for symbol '{0}'. Spec: {1}, Code: {2}",
+  "report_title": "# Consistency Audit Report (Docs Auditor)\n\n",
+  "report_header": "The following inconsistencies between the specifications and the code were detected. Please correct each item.\n\n",
+  "report_section_title": "## Inconsistent Items (TODO)\n\n",
+  "code_action_title": "Automatically append line numbers {0} to specification"
+}

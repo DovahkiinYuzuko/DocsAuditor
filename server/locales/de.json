@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "Das in den Spezifikationen dokumentierte Symbol '{0}' fehlt im Code.",
+  "kind_mismatch": "Symboltyp für '{0}' stimmt nicht überein. Spezifikation: {1}, Code: {2}",
+  "type_mismatch": "Typkonflikt für Parameter '{1}' in Funktion '{0}'. Spezifikation: {2}, Code: {3}",
+  "var_type_mismatch": "Typkonflikt für Variable '{0}'. Spezifikation: {1}, Code: {2}",
+  "param_count_mismatch": "Parameteranzahl-Konflikt für Funktion '{0}'. Spezifikation: {1}, Code: {2}",
+  "return_type_mismatch": "Rückgabetyp-Konflikt für Funktion '{0}'. Spezifikation: {1}, Code: {2}",
+  "line_number_missing": "Zeilennummer für Symbol '{0}' fehlt in der Spezifikation.",
+  "line_number_mismatch": "Zeilennummern-Konflikt für Symbol '{0}'. Spezifikation: {1}, Code: {2}",
+  "report_title": "# Konsistenzprüfungsbericht (Docs Auditor)\n\n",
+  "report_header": "Die folgenden Unstimmigkeiten zwischen den Spezifikationen und dem Code wurden festgestellt. Bitte korrigieren Sie jedes Element.\n\n",
+  "report_section_title": "## Unstimmige Elemente (TODO)\n\n",
+  "code_action_title": "Zeilennummern {0} automatisch an Spezifikation anhängen"
+}

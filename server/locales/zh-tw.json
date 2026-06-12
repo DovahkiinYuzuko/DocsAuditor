@@ -1,0 +1,14 @@
+{
+  "missing_in_code": "規範中記錄的符號 '{0}' 在程式碼中缺失。",
+  "kind_mismatch": "符號 '{0}' 的類型不匹配。規範: {1}, 程式碼: {2}",
+  "type_mismatch": "函式 '{0}' 中的參數 '{1}' 型態不匹配。規範: {2}, 程式碼: {3}",
+  "var_type_mismatch": "變數 '{0}' 的型態不匹配。規範: {1}, 程式碼: {2}",
+  "param_count_mismatch": "函式 '{0}' 的參數數量不匹配。規範: {1}, 程式碼: {2}",
+  "return_type_mismatch": "函式 '{0}' 的傳回值型態不匹配。規範: {1}, 程式碼: {2}",
+  "line_number_missing": "規範中缺少符號 '{0}' 的行號。",
+  "line_number_mismatch": "符號 '{0}' 的行號不匹配。規範: {1}, 程式碼: {2}",
+  "report_title": "# 一致性審計報告 (Docs Auditor)\n\n",
+  "report_header": "偵測到規範與程式碼之間存在以下不一致。請修正每個項目。\n\n",
+  "report_section_title": "## 不一致項目 (TODO)\n\n",
+  "code_action_title": "自動向規範追加行號 {0}"
+}
