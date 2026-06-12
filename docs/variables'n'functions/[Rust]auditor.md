@@ -6,6 +6,8 @@
 
 ## データ構造定義
 
+※ LSP Diagnostic のメタデータ（`data`フィールド）としてシリアライズ送信し、Code Action 時にデシリアライズして取り出すため、以下のデータ構造はすべて `serde::Serialize` および `serde::Deserialize` を導出する。
+
 ### `AuditIssueType` (列挙型)
 監査エラーの種類。
 - `MissingInCode` - 仕様書に記載されているが、コード側に対応する定義が存在しない。

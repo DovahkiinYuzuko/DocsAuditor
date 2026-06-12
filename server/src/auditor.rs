@@ -1,6 +1,6 @@
 use crate::parser::{SymbolInfo, SymbolKind};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AuditIssueType {
     MissingInCode,
     TypeMismatch,
@@ -10,7 +10,7 @@ pub enum AuditIssueType {
     LineNumberMismatch,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AuditIssue {
     pub name: String,
     pub issue_type: AuditIssueType,
