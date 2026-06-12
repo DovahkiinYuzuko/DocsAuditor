@@ -1,5 +1,4 @@
 use regex::Regex;
-use pulldown_cmark::{Event, Parser as MdParser, Tag};
 use tree_sitter::{Node, Parser as TsParser};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,39 +15,24 @@ pub struct SymbolInfo {
     pub return_type: Option<String>,
     pub var_type: Option<String>,
     pub line_range: Option<(usize, usize)>, // (start_line, end_line) - 1-indexed
+    pub spec_line: Option<usize>,           // 仕様書内での定義物理行番号（1-indexed）
 }
 
 pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
     let mut symbols = Vec::new();
-    let parser = MdParser::new(content);
     
-    let mut in_item = false;
-    let mut item_text = String::new();
-
-    // Markdownのリストアイテムテキストを抽出
-    for event in parser {
-        match event {
-            Event::Start(Tag::Item) => {
-                in_item = true;
-                item_text.clear();
+    // 行ベースで解析して仕様書の物理行番号を正確に特定する
+    for (idx, line) in content.lines().enumerate() {
+        let physical_line = idx + 1;
+        let trimmed = line.trim();
+        
+        // 箇条書き（- または *）で始まる行を解析対象とする
+        if trimmed.starts_with('-') || trimmed.starts_with('*') {
+            let item_content = trimmed[1..].trim();
+            if let Some(mut sym) = parse_spec_line(item_content) {
+                sym.spec_line = Some(physical_line);
+                symbols.push(sym);
             }
-            Event::Text(text) => {
-                if in_item {
-                    item_text.push_str(&text);
-                }
-            }
-            Event::Code(code) => {
-                if in_item {
-                    item_text.push_str(&code);
-                }
-            }
-            Event::End(Tag::Item) => {
-                in_item = false;
-                if let Some(sym) = parse_spec_line(&item_text) {
-                    symbols.push(sym);
-                }
-            }
-            _ => {}
         }
     }
     symbols
@@ -104,6 +88,7 @@ fn parse_spec_line(line: &str) -> Option<SymbolInfo> {
             return_type,
             var_type: None,
             line_range,
+            spec_line: None,
         });
     }
 
@@ -120,6 +105,7 @@ fn parse_spec_line(line: &str) -> Option<SymbolInfo> {
             return_type: None,
             var_type,
             line_range,
+            spec_line: None,
         });
     }
 
@@ -207,6 +193,7 @@ fn extract_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
         return_type,
         var_type: None,
         line_range: Some((start_line, end_line)),
+        spec_line: None,
     })
 }
 
@@ -228,6 +215,7 @@ fn extract_variable_info(node: Node, source: &str) -> Option<SymbolInfo> {
         return_type: None,
         var_type,
         line_range: Some((start_line, end_line)),
+        spec_line: None,
     })
 }
 
@@ -237,12 +225,11 @@ mod tests {
 
     #[test]
     fn test_parse_markdown_spec() {
-        let md = r#"
-# Test Spec
+        let md = r#"# Test Spec
 - fn hello(user: String) -> Result (L10-20)
 - let timeout: u64 (L30)
 - invalid item without fn or let
-        "#;
+"#;
         let symbols = parse_markdown_spec(md);
         assert_eq!(symbols.len(), 2);
 
@@ -252,12 +239,14 @@ mod tests {
         assert_eq!(symbols[0].params, Some(vec![("user".to_string(), "String".to_string())]));
         assert_eq!(symbols[0].return_type, Some("Result".to_string()));
         assert_eq!(symbols[0].line_range, Some((10, 20)));
+        assert_eq!(symbols[0].spec_line, Some(2)); // 2行目
 
         // 2つ目のシンボル (Variable)
         assert_eq!(symbols[1].name, "timeout");
         assert_eq!(symbols[1].kind, SymbolKind::Variable);
         assert_eq!(symbols[1].var_type, Some("u64".to_string()));
         assert_eq!(symbols[1].line_range, Some((30, 30)));
+        assert_eq!(symbols[1].spec_line, Some(3)); // 3行目
     }
 
     #[test]

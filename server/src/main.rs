@@ -1,3 +1,4 @@
+mod auditor;
 mod parser;
 mod state;
 
