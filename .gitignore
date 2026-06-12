@@ -1,0 +1,27 @@
+# すべてを無視
+*
+
+# 例外（Gitに含めるファイルとフォルダ）
+!.gitignore
+!package.json
+!tsconfig.json
+!README.md
+!LICENSE
+!NOTICE.md
+
+# 仕様書ドキュメント
+!docs/
+!docs/**
+
+# TypeScript 拡張機能
+!src/
+!src/**
+
+# Rust サーバー
+!server/
+!server/**
+server/target/
+
+# 一時フォルダやパッケージ管理
+node_modules/
+out/

@@ -1,0 +1,44 @@
+{
+  "name": "docs-auditor",
+  "displayName": "Docs Auditor",
+  "description": "LSP-based specification and code consistency auditor",
+  "version": "0.1.0",
+  "publisher": "YuzukoUnderson",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:rust"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Docs Auditor Configuration",
+      "properties": {
+        "docsAuditor.autoInjection": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically inject line numbers into specification documents when verified."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^4.9.5"
+  }
+}
