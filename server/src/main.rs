@@ -63,6 +63,7 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::INFO, "Docs Auditor LSP initialized!")
             .await;
+        self.run_initial_scan().await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -538,6 +539,265 @@ impl Backend {
             }
         } else {
             self.state.lock().await.dispatch(Event::AnalysisCompleted);
+        }
+    }
+
+    async fn run_initial_scan(&self) {
+        let root_path_opt = { self.root_path.lock().await.clone() };
+        let root_path = match root_path_opt {
+            Some(path) => path,
+            None => return,
+        };
+
+        let spec_dir = root_path.join("docs").join("variables'n'functions");
+        if !spec_dir.exists() {
+            return;
+        }
+
+        let mut read_dir = match tokio::fs::read_dir(&spec_dir).await {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+
+        let locale = { self.locale.lock().await.clone() };
+
+        while let Ok(Some(entry)) = read_dir.next_entry().await {
+            let path = entry.path();
+            if path.is_file() {
+                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if filename.ends_with(".md") && filename.starts_with('[') {
+                    if let Ok(spec_text) = tokio::fs::read_to_string(&path).await {
+                        if let Ok(spec_uri) = Url::from_file_path(&path) {
+                            if let Some(end_bracket) = filename.find(']') {
+                                let lang = &filename[1..end_bracket];
+                                let target_lang = lang.to_lowercase();
+                                let name_without_lang = &filename[end_bracket + 1..filename.len() - 3];
+                                
+                                let extension = match target_lang.as_str() {
+                                    "rust" => "rs",
+                                    "typescript" => "ts",
+                                    "javascript" => "js",
+                                    "python" => "py",
+                                    "go" => "go",
+                                    "c" => "c",
+                                    "cpp" => "cpp",
+                                    "csharp" => "cs",
+                                    "ruby" => "rb",
+                                    "swift" => "swift",
+                                    "kotlin" => "kt",
+                                    "java" => "java",
+                                    _ => "",
+                                };
+
+                                if !extension.is_empty() {
+                                    let target_filename = format!("{}.{}", name_without_lang, extension);
+                                    if let Some(found_code_path) = find_file_in_dir(&root_path, &target_filename).await {
+                                        if let Ok(code_text) = tokio::fs::read_to_string(&found_code_path).await {
+                                            let spec_symbols = parser::parse_markdown_spec(&spec_text);
+                                            let code_symbols = parser::parse_code(&code_text, &target_lang);
+                                            let project_used = collect_project_used_symbols(&root_path).await;
+                                            
+                                            let issues = audit_symbols(&spec_symbols, &code_symbols, &project_used, &locale);
+                                            
+                                            let mut diagnostics = Vec::new();
+                                            for issue in &issues {
+                                                let line_num = issue.spec_line.saturating_sub(1) as u32;
+                                                let line_content = spec_text.lines().nth(line_num as usize).unwrap_or("");
+                                                let start_char = line_content.find(|c: char| !c.is_whitespace()).unwrap_or(0) as u32;
+                                                let end_char = line_content.len() as u32;
+
+                                                let severity = match issue.issue_type {
+                                                    AuditIssueType::MissingInCode => DiagnosticSeverity::ERROR,
+                                                    AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch | AuditIssueType::DependencyNotUsed | AuditIssueType::DeadCode => DiagnosticSeverity::WARNING,
+                                                    AuditIssueType::LineNumberMissing | AuditIssueType::LineNumberMismatch => {
+                                                        DiagnosticSeverity::HINT
+                                                    }
+                                                };
+
+                                                let diagnostic_data = serde_json::to_value(issue).ok();
+
+                                                let d = Diagnostic {
+                                                    range: Range {
+                                                        start: Position { line: line_num, character: start_char },
+                                                        end: Position { line: line_num, character: end_char },
+                                                    },
+                                                    severity: Some(severity),
+                                                    code: None,
+                                                    code_description: None,
+                                                    source: Some("Docs Auditor".to_string()),
+                                                    message: issue.message.clone(),
+                                                    related_information: None,
+                                                    tags: None,
+                                                    data: diagnostic_data,
+                                                };
+                                                diagnostics.push(d);
+                                            }
+                                            
+                                            self.client.publish_diagnostics(spec_uri.clone(), diagnostics, None).await;
+                                            
+                                            {
+                                                let mut cache = self.issues_cache.lock().await;
+                                                cache.insert(normalize_url(&spec_uri), issues);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut all_issues = Vec::new();
+        {
+            let cache = self.issues_cache.lock().await;
+            for (uri, issues) in cache.iter() {
+                for issue in issues {
+                    all_issues.push((uri.clone(), issue.clone()));
+                }
+            }
+        }
+
+        let report_path = root_path.join("variables_functions_audit_report.md");
+        if all_issues.is_empty() {
+            if report_path.exists() {
+                let _ = tokio::fs::remove_file(&report_path).await;
+            }
+        } else {
+            let mut report_content = String::new();
+            report_content.push_str(&get_message(&MessageKey::ReportTitle, &locale));
+            report_content.push_str(&get_message(&MessageKey::ReportHeader, &locale));
+            report_content.push_str(&get_message(&MessageKey::ReportSectionTitle, &locale));
+
+            let loc = locale.to_lowercase();
+            let is_ja = loc.starts_with("ja");
+            let is_zh_cn = loc.starts_with("zh-cn") || loc.starts_with("zh-hans");
+            let is_zh_tw = loc.starts_with("zh-tw") || loc.starts_with("zh-hk") || loc.starts_with("zh-hant");
+            let is_ko = loc.starts_with("ko");
+            let is_et = loc.starts_with("et");
+            let is_vi = loc.starts_with("vi");
+            let is_es = loc.starts_with("es");
+            let is_fr = loc.starts_with("fr");
+            let is_de = loc.starts_with("de");
+
+            for (s_uri, issue) in &all_issues {
+                let issue_type_str = match issue.issue_type {
+                    AuditIssueType::MissingInCode => {
+                        if is_ja { "コード側定義なし" }
+                        else if is_zh_cn { "代码侧未定义" }
+                        else if is_zh_tw { "程式碼側未定義" }
+                        else if is_ko { "코드 측 정의 없음" }
+                        else if is_et { "Koodis puudub definitsioon" }
+                        else if is_vi { "Thiếu định nghĩa trong mã" }
+                        else if is_es { "Falta definición en código" }
+                        else if is_fr { "Définition manquante dans le code" }
+                        else if is_de { "Fehlende Definition im Code" }
+                        else { "Missing in Code" }
+                    }
+                    AuditIssueType::TypeMismatch => {
+                        if is_ja { "型ミスマッチ" }
+                        else if is_zh_cn { "类型不匹配" }
+                        else if is_zh_tw { "型態不匹配" }
+                        else if is_ko { "타입 불일치" }
+                        else if is_et { "Tüübi lahknevus" }
+                        else if is_vi { "Sai kiểu dữ liệu" }
+                        else if is_es { "Discrepancia de tipo" }
+                        else if is_fr { "Incompatibilité de type" }
+                        else if is_de { "Typkonflikt" }
+                        else { "Type Mismatch" }
+                    }
+                    AuditIssueType::ParamCountMismatch => {
+                        if is_ja { "引数個数ミスマッチ" }
+                        else if is_zh_cn { "参数数量不匹配" }
+                        else if is_zh_tw { "參數數量不匹配" }
+                        else if is_ko { "매개변수 개수 불일치" }
+                        else if is_et { "Parameetrite arvu lahknevus" }
+                        else if is_vi { "Số lượng tham số không khớp" }
+                        else if is_es { "Discrepancia de parámetros" }
+                        else if is_fr { "Incompatibilité du nombre de paramètres" }
+                        else if is_de { "Parameteranzahl-Konflikt" }
+                        else { "Parameter Count Mismatch" }
+                    }
+                    AuditIssueType::ReturnTypeMismatch => {
+                        if is_ja { "戻り値ミスマッチ" }
+                        else if is_zh_cn { "返回值类型不匹配" }
+                        else if is_zh_tw { "傳回值型態不匹配" }
+                        else if is_ko { "반환 타입 불일치" }
+                        else if is_et { "Tagastustüübi lahknevus" }
+                        else if is_vi { "Kiểu trả về không khớp" }
+                        else if is_es { "Discrepancia de tipo de retorno" }
+                        else if is_fr { "Incompatibilité du type de retour" }
+                        else if is_de { "Rückgabetyp-Konflikt" }
+                        else { "Return Type Mismatch" }
+                    }
+                    AuditIssueType::LineNumberMissing => {
+                        if is_ja { "行番号未記載" }
+                        else if is_zh_cn { "行号未填写" }
+                        else if is_zh_tw { "行號未填寫" }
+                        else if is_ko { "라인 번호 누락" }
+                        else if is_et { "Reanumber puudub" }
+                        else if is_vi { "Chưa ghi số dòng" }
+                        else if is_es { "Falta número de línea" }
+                        else if is_fr { "Numéro de ligne manquant" }
+                        else if is_de { "Zeilennummer fehlt" }
+                        else { "Line Number Missing" }
+                    }
+                    AuditIssueType::LineNumberMismatch => {
+                        if is_ja { "行番号ミスマッチ" }
+                        else if is_zh_cn { "行号不匹配" }
+                        else if is_zh_tw { "行號不匹配" }
+                        else if is_ko { "라인 번호 불일치" }
+                        else if is_et { "Reanumbri lahknevus" }
+                        else if is_vi { "Số dòng không khớp" }
+                        else if is_es { "Discrepancia de número de línea" }
+                        else if is_fr { "Incompatibilité de dynamic número de línea" }
+                        else if is_de { "Zeilennummern-Konflikt" }
+                        else { "Line Number Mismatch" }
+                    }
+                    AuditIssueType::DependencyNotUsed => {
+                        if is_ja { "依存先未使用" }
+                        else if is_zh_cn { "依赖项未使用" }
+                        else if is_zh_tw { "依賴項未使用" }
+                        else if is_ko { "의존성 미사용" }
+                        else if is_et { "Kasutamata sõltuvus" }
+                        else if is_vi { "Phụ thuộc chưa dùng" }
+                        else if is_es { "Dependencia no utilizada" }
+                        else if is_fr { "Définition manquante dans le code" }
+                        else if is_de { "Abhängigkeit nicht verwendet" }
+                        else { "Dependency Not Used" }
+                    }
+                    AuditIssueType::DeadCode => {
+                        if is_ja { "デッドコード" }
+                        else if is_zh_cn { "无用代码" }
+                        else if is_zh_tw { "無用程式碼" }
+                        else if is_ko { "데드 코드" }
+                        else if is_et { "Surnud kood" }
+                        else if is_vi { "Mã chết" }
+                        else if is_es { "Código muerto" }
+                        else if is_fr { "Code mort" }
+                        else if is_de { "Toter Code" }
+                        else { "Dead Code" }
+                    }
+                };
+
+                let spec_path_buf = s_uri.to_file_path().unwrap_or_else(|_| PathBuf::from(""));
+                let spec_relative = spec_path_buf.strip_prefix(&root_path)
+                    .unwrap_or(&spec_path_buf)
+                    .to_string_lossy();
+
+                report_content.push_str(&format!(
+                    "- [ ] **{}** (シンボル: `{}`)\n  - **内容**: {}\n  - **仕様書箇所**: [{}](file:///{}) L{}\n",
+                    issue_type_str,
+                    issue.name,
+                    issue.message,
+                    spec_relative,
+                    spec_path_buf.to_string_lossy().replace('\\', "/"),
+                    issue.spec_line
+                ));
+            }
+
+            let _ = tokio::fs::write(&report_path, report_content).await;
         }
     }
 }
