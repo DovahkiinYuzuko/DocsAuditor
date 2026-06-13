@@ -155,6 +155,7 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn on_change(&self, uri: Url, text: String) {
+        let _: &tokio::sync::Mutex<crate::state::hfsm::Hfsm> = &self.state;
         {
             self.state.lock().await.dispatch(Event::DocumentChanged);
         }
