@@ -3,6 +3,7 @@
 
 # 例外（Gitに含めるファイルとフォルダ）
 !.gitignore
+!.vscodeignore
 !package.json
 !tsconfig.json
 !README.md

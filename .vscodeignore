@@ -1,0 +1,14 @@
+# デフォルトで全ファイル・ディレクトリを除外
+**
+
+# 必要なファイル・フォルダのみ例外として許可
+!package.json
+!out/**
+!docs/variables'n'functions/**
+!server/locales/**
+!server/.cargo/**
+!server/target/debug/server
+!server/target/debug/server.exe
+!server/target/release/server
+!server/target/release/server.exe
+!node_modules/**
