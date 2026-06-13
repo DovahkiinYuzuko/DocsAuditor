@@ -1,0 +1,81 @@
+name: Build and Package Extension
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Package for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+            rust-target: x86_64-pc-windows-msvc
+            binary-src: server/target/x86_64-pc-windows-msvc/release/server.exe
+            binary-dest: server/target/release/server.exe
+          - os: ubuntu-latest
+            target: linux-x64
+            rust-target: x86_64-unknown-linux-gnu
+            binary-src: server/target/x86_64-unknown-linux-gnu/release/server
+            binary-dest: server/target/release/server
+          - os: macos-latest
+            target: darwin-x64
+            rust-target: x86_64-apple-darwin
+            binary-src: server/target/x86_64-apple-darwin/release/server
+            binary-dest: server/target/release/server
+          - os: macos-latest
+            target: darwin-arm64
+            rust-target: aarch64-apple-darwin
+            binary-src: server/target/aarch64-apple-darwin/release/server
+            binary-dest: server/target/release/server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server -> target
+
+      - name: Build Rust server
+        run: cargo build --release --manifest-path server/Cargo.toml --target ${{ matrix.rust-target }}
+
+      - name: Copy binary to expected target location
+        shell: bash
+        run: |
+          mkdir -p server/target/release
+          cp ${{ matrix.binary-src }} ${{ matrix.binary-dest }}
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --target ${{ matrix.target }} --skip-license
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: "*.vsix"

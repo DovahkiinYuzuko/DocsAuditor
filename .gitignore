@@ -29,3 +29,6 @@ server/target/
 # 一時フォルダやパッケージ管理
 node_modules/
 out/
+
+!.github/
+!.github/**
