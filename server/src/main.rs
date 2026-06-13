@@ -16,6 +16,7 @@ use state::hfsm::{Hfsm, Event};
 use auditor::{audit_symbols, AuditIssue, AuditIssueType};
 use i18n::{get_message, MessageKey};
 
+#[derive(Clone)]
 struct Backend {
     client: Client,
     state: Arc<Mutex<Hfsm>>,
@@ -63,7 +64,11 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::INFO, "Docs Auditor LSP initialized!")
             .await;
-        self.run_initial_scan().await;
+        
+        let this = self.clone();
+        tokio::spawn(async move {
+            this.run_initial_scan().await;
+        });
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -329,7 +334,7 @@ impl Backend {
             diagnostics.push(d);
         }
 
-        self.client.publish_diagnostics(spec_uri.clone(), diagnostics, None).await;
+        self.client.publish_diagnostics(normalize_url(&spec_uri), diagnostics, None).await;
 
         // issues_cache を更新
         {
@@ -543,6 +548,9 @@ impl Backend {
     }
 
     async fn run_initial_scan(&self) {
+        // クライアントの初期化完了を少し待つための安全スリープ
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
         let root_path_opt = { self.root_path.lock().await.clone() };
         let root_path = match root_path_opt {
             Some(path) => path,
@@ -560,6 +568,21 @@ impl Backend {
         };
 
         let locale = { self.locale.lock().await.clone() };
+
+        // 起動時自動インジェクション設定の確認（ループの外で1回だけ行う）
+        let config_item = ConfigurationItem {
+            scope_uri: None,
+            section: Some("docsAuditor.autoInjection".to_string()),
+        };
+        let mut auto_injection = false;
+        if let Ok(configs) = self.client.configuration(vec![config_item]).await {
+            if let Some(val) = configs.first() {
+                auto_injection = val.as_bool().unwrap_or(false);
+            }
+        }
+
+        // プロジェクト全体のシンボル出現情報をループの前に1度だけ収集
+        let project_used = collect_project_used_symbols(&root_path).await;
 
         while let Ok(Some(entry)) = read_dir.next_entry().await {
             let path = entry.path();
@@ -595,11 +618,12 @@ impl Backend {
                                         if let Ok(code_text) = tokio::fs::read_to_string(&found_code_path).await {
                                             let spec_symbols = parser::parse_markdown_spec(&spec_text);
                                             let code_symbols = parser::parse_code(&code_text, &target_lang);
-                                            let project_used = collect_project_used_symbols(&root_path).await;
                                             
+                                            // 事前収集した project_used を再利用
                                             let issues = audit_symbols(&spec_symbols, &code_symbols, &project_used, &locale);
                                             
                                             let mut diagnostics = Vec::new();
+                                            let mut line_issues = Vec::new();
                                             for issue in &issues {
                                                 let line_num = issue.spec_line.saturating_sub(1) as u32;
                                                 let line_content = spec_text.lines().nth(line_num as usize).unwrap_or("");
@@ -610,6 +634,7 @@ impl Backend {
                                                     AuditIssueType::MissingInCode => DiagnosticSeverity::ERROR,
                                                     AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch | AuditIssueType::DependencyNotUsed | AuditIssueType::DeadCode => DiagnosticSeverity::WARNING,
                                                     AuditIssueType::LineNumberMissing | AuditIssueType::LineNumberMismatch => {
+                                                        line_issues.push(issue.clone());
                                                         DiagnosticSeverity::HINT
                                                     }
                                                 };
@@ -633,11 +658,33 @@ impl Backend {
                                                 diagnostics.push(d);
                                             }
                                             
-                                            self.client.publish_diagnostics(spec_uri.clone(), diagnostics, None).await;
+                                            self.client.publish_diagnostics(normalize_url(&spec_uri), diagnostics, None).await;
                                             
                                             {
                                                 let mut cache = self.issues_cache.lock().await;
                                                 cache.insert(normalize_url(&spec_uri), issues);
+                                            }
+
+                                            if auto_injection && !line_issues.is_empty() {
+                                                if let Some(_lock) = locker::FileLocker::try_lock(&path) {
+                                                    let mut updated_lines: Vec<String> = spec_text.lines().map(|s| s.to_string()).collect();
+
+                                                    for issue in line_issues {
+                                                        let line_idx = issue.spec_line.saturating_sub(1);
+                                                        if line_idx < updated_lines.len() {
+                                                            let line = &updated_lines[line_idx];
+                                                            if let Some(code_range) = issue.code_line_range {
+                                                                let line_regex = regex::Regex::new(r"\s*\(L\d+(?:-\d+)?\)\s*$").unwrap();
+                                                                let clean_line = line_regex.replace(line, "").trim_end().to_string();
+                                                                let updated_line = format!("{} (L{}-{})", clean_line, code_range.0, code_range.1);
+                                                                updated_lines[line_idx] = updated_line;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    let new_spec_content = updated_lines.join("\n");
+                                                    let _ = tokio::fs::write(&path, new_spec_content).await;
+                                                }
                                             }
                                         }
                                     }
@@ -803,20 +850,15 @@ impl Backend {
 }
 
 fn normalize_url(url: &Url) -> Url {
-    if url.scheme() == "file" {
-        if let Ok(path) = url.to_file_path() {
-            let path_str = path.to_string_lossy().into_owned();
-            if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
-                let first_char = (path_str.as_bytes()[0] as char).to_ascii_lowercase();
-                let rest = &path_str[1..];
-                let normalized_path = format!("{}{}", first_char, rest);
-                if let Ok(normalized_url) = Url::from_file_path(normalized_path) {
-                    return normalized_url;
-                }
-            }
+    let mut s = url.to_string();
+    if s.starts_with("file:///") && s.len() >= 10 {
+        let drive_char = s.as_bytes()[8] as char;
+        if drive_char.is_ascii_uppercase() && s.as_bytes()[9] == b':' {
+            let lower = drive_char.to_ascii_lowercase();
+            s.replace_range(8..9, &lower.to_string());
         }
     }
-    url.clone()
+    Url::parse(&s).unwrap_or_else(|_| url.clone())
 }
 
 async fn find_file_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {

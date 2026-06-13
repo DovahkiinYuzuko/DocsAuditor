@@ -7,17 +7,17 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
 
 ## 変数定義
 
-### `client`
+### `client` (L11-11)
 - **型**: `LanguageClient | undefined`
 - **説明**: 起動したLSPクライアントのインスタンスを保持するグローバル変数。
 
-### `outputChannel`
+### `outputChannel` (L12-12)
 - **型**: `vscode.OutputChannel`
 - **説明**: 拡張機能およびLSPサーバーのデバッグログを出力するためのVS Code出力チャネル。
 
 ## 関数定義
 
-### `activate`
+### `activate` (L28-125)
 - **引数**:
   - `context: vscode.ExtensionContext` - 拡張機能のコンテキストオブジェクト。
 - **戻り値**: `void`
@@ -36,7 +36,7 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
   - `LanguageClient` インスタンスを生成して起動する。
   - `docsAuditor.autoInjection` 設定変更の監視登録を行う。
   
-### `deactivate`
+### `deactivate` (L127-133)
 - **引数**: なし
 - **戻り値**: `Thenable<void> | undefined`
 - **説明**:

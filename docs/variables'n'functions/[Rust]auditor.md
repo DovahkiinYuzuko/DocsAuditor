@@ -31,7 +31,7 @@
 
 ## 関数定義
 
-### `audit_symbols`
+### `audit_symbols` (L26-258)
 - **引数**:
   - `spec_symbols: &[SymbolInfo]` - 仕様書から抽出されたシンボルのリスト。
   - `code_symbols: &[SymbolInfo]` - コードから抽出されたシンボルのリスト。

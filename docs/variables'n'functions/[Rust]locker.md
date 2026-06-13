@@ -13,7 +13,7 @@
 
 ## 関数・メソッド定義
 
-### `try_lock`
+### `try_lock` (L9-21)
 - **引数**:
   - `target_path: &std::path::Path` - ロックしたい対象ファイルのパス。
 - **戻り値**: `Option<FileLocker>`

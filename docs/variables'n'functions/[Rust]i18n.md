@@ -27,7 +27,7 @@ LSPサーバーが出力する警告（Diagnostics）、コードアクション
 
 ## 関数定義
 
-### `get_message`
+### `get_message` (L47-99)
 - **引数**:
   - `key: &MessageKey` - 翻訳対象のメッセージキー。
   - `locale: &str` - クライアントから受信したロケール文字列（例: `"en"`, `"ja"`, `"zh-CN"` など）。
