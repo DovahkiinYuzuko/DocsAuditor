@@ -11,5 +11,6 @@
   "report_header": "Phát hiện các điểm không nhất quán sau đây giữa đặc tả và mã nguồn. Vui lòng sửa lại từng mục.\n\n",
   "report_section_title": "## Các mục không nhất quán (TODO)\n\n",
   "code_action_title": "Tự động thêm số dòng {0} vào đặc tả",
-  "dependency_not_used": "Phụ thuộc '{1}' được xác định trong đặc tả không được sử dụng trong ký hiệu '{0}'."
+  "dependency_not_used": "Phụ thuộc '{1}' được xác định trong đặc tả không được sử dụng trong ký hiệu '{0}'.",
+  "dead_code": "Ký hiệu '{0}' được xác định trong đặc tả không được tham chiếu ở bất kỳ đâu trong dự án (mã chết)."
 }

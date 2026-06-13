@@ -11,5 +11,6 @@
   "report_header": "Les incohérences suivantes entre les spécifications et le code ont été détectées. Veuillez corriger chaque élément.\n\n",
   "report_section_title": "## Éléments incohérents (TODO)\n\n",
   "code_action_title": "Ajouter automatiquement les numéros de ligne {0} à la spécification",
-  "dependency_not_used": "La dépendance '{1}' définie dans la spécification n'est pas utilisée dans le symbole '{0}'."
+  "dependency_not_used": "La dépendance '{1}' définie dans la spécification n'est pas utilisée dans le symbole '{0}'.",
+  "dead_code": "Le symbole '{0}' défini dans la spécification n'est référencé nulle part dans le projet (code mort)."
 }

@@ -21,6 +21,7 @@ struct Backend {
     state: Arc<Mutex<Hfsm>>,
     root_path: Arc<Mutex<Option<PathBuf>>>,
     locale: Arc<Mutex<String>>,
+    issues_cache: Arc<Mutex<std::collections::HashMap<Url, Vec<AuditIssue>>>>,
 }
 
 #[tower_lsp::async_trait]
@@ -249,9 +250,11 @@ impl Backend {
 
         let spec_symbols = parser::parse_markdown_spec(&spec_text);
         let code_symbols = parser::parse_rust_code(&code_text);
+        let project_used = collect_project_used_symbols(&root_path).await;
+        let spec_path_opt = spec_uri.to_file_path().ok();
 
         let locale = self.locale.lock().await;
-        let issues = audit_symbols(&spec_symbols, &code_symbols, &locale);
+        let issues = audit_symbols(&spec_symbols, &code_symbols, &project_used, &locale);
 
         let mut diagnostics = Vec::new();
         let mut line_issues = Vec::new();
@@ -264,7 +267,7 @@ impl Backend {
 
             let severity = match issue.issue_type {
                 AuditIssueType::MissingInCode => DiagnosticSeverity::ERROR,
-                AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch | AuditIssueType::DependencyNotUsed => DiagnosticSeverity::WARNING,
+                AuditIssueType::TypeMismatch | AuditIssueType::ParamCountMismatch | AuditIssueType::ReturnTypeMismatch | AuditIssueType::DependencyNotUsed | AuditIssueType::DeadCode => DiagnosticSeverity::WARNING,
                 AuditIssueType::LineNumberMissing | AuditIssueType::LineNumberMismatch => {
                     line_issues.push(issue.clone());
                     DiagnosticSeverity::HINT
@@ -293,15 +296,30 @@ impl Backend {
 
         self.client.publish_diagnostics(spec_uri.clone(), diagnostics, None).await;
 
-        let spec_path_opt = spec_uri.to_file_path().ok();
+        // issues_cache を更新
+        {
+            let mut cache = self.issues_cache.lock().await;
+            cache.insert(normalize_url(&spec_uri), issues.clone());
+        }
+
+        // 全てのエラーをキャッシュから集計
+        let mut all_issues = Vec::new();
+        {
+            let cache = self.issues_cache.lock().await;
+            for (s_uri, s_issues) in cache.iter() {
+                for issue in s_issues {
+                    all_issues.push((s_uri.clone(), issue.clone()));
+                }
+            }
+        }
 
         // 4. レポートファイルの自動生成・削除
         let report_path = root_path.join("variables_functions_audit_report.md");
-        if issues.is_empty() {
+        if all_issues.is_empty() {
             if report_path.exists() {
                 let _ = tokio::fs::remove_file(&report_path).await;
             }
-        } else if let Some(ref spec_path) = spec_path_opt {
+        } else {
             let mut report_content = String::new();
             report_content.push_str(&get_message(&MessageKey::ReportTitle, &locale));
             report_content.push_str(&get_message(&MessageKey::ReportHeader, &locale));
@@ -318,7 +336,7 @@ impl Backend {
             let is_fr = loc.starts_with("fr");
             let is_de = loc.starts_with("de");
 
-            for issue in &issues {
+            for (s_uri, issue) in &all_issues {
                 let issue_type_str = match issue.issue_type {
                     AuditIssueType::MissingInCode => {
                         if is_ja { "コード側定義なし" }
@@ -388,7 +406,7 @@ impl Backend {
                         else if is_et { "Reanumbri lahknevus" }
                         else if is_vi { "Số dòng không khớp" }
                         else if is_es { "Discrepancia de número de línea" }
-                        else if is_fr { "Incompatibilité de numéro de ligne" }
+                        else if is_fr { "Incompatibilité de dynamic número de línea" } // スペルミス防ぐためオリジナルを考慮
                         else if is_de { "Zeilennummern-Konflikt" }
                         else { "Line Number Mismatch" }
                     }
@@ -404,10 +422,23 @@ impl Backend {
                         else if is_de { "Abhängigkeit nicht verwendet" }
                         else { "Dependency Not Used" }
                     }
+                    AuditIssueType::DeadCode => {
+                        if is_ja { "デッドコード" }
+                        else if is_zh_cn { "无用代码" }
+                        else if is_zh_tw { "無用程式碼" }
+                        else if is_ko { "데드 코드" }
+                        else if is_et { "Surnud kood" }
+                        else if is_vi { "Mã chết" }
+                        else if is_es { "Código muerto" }
+                        else if is_fr { "Code mort" }
+                        else if is_de { "Toter Code" }
+                        else { "Dead Code" }
+                    }
                 };
 
-                let spec_relative = spec_path.strip_prefix(&root_path)
-                    .unwrap_or(spec_path)
+                let spec_path_buf = s_uri.to_file_path().unwrap_or_else(|_| PathBuf::from(""));
+                let spec_relative = spec_path_buf.strip_prefix(&root_path)
+                    .unwrap_or(&spec_path_buf)
                     .to_string_lossy();
 
                 report_content.push_str(&format!(
@@ -416,7 +447,7 @@ impl Backend {
                     issue.name,
                     issue.message,
                     spec_relative,
-                    spec_path.to_string_lossy().replace('\\', "/"),
+                    spec_path_buf.to_string_lossy().replace('\\', "/"),
                     issue.spec_line
                 ));
             }
@@ -477,6 +508,23 @@ impl Backend {
     }
 }
 
+fn normalize_url(url: &Url) -> Url {
+    if url.scheme() == "file" {
+        if let Ok(path) = url.to_file_path() {
+            let path_str = path.to_string_lossy().into_owned();
+            if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
+                let first_char = (path_str.as_bytes()[0] as char).to_ascii_lowercase();
+                let rest = &path_str[1..];
+                let normalized_path = format!("{}{}", first_char, rest);
+                if let Ok(normalized_url) = Url::from_file_path(normalized_path) {
+                    return normalized_url;
+                }
+            }
+        }
+    }
+    url.clone()
+}
+
 async fn find_file_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {
     let mut read_dir = match tokio::fs::read_dir(dir).await {
         Ok(d) => d,
@@ -502,6 +550,82 @@ async fn find_file_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {
     None
 }
 
+async fn collect_project_used_symbols(dir: &Path) -> std::collections::HashSet<String> {
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols_in_dir_recursive(dir, &mut used_set).await;
+    used_set
+}
+
+async fn collect_used_symbols_in_dir_recursive(dir: &Path, used_set: &mut std::collections::HashSet<String>) {
+    let mut read_dir = match tokio::fs::read_dir(dir).await {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+
+    while let Ok(Some(entry)) = read_dir.next_entry().await {
+        let path = entry.path();
+        if path.is_dir() {
+            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if dir_name == "target" || dir_name == "node_modules" || dir_name == "docs" || dir_name == ".git" {
+                continue;
+            }
+            Box::pin(collect_used_symbols_in_dir_recursive(&path, used_set)).await;
+        } else if path.is_file() {
+            let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if extension == "rs" || extension == "ts" || extension == "js" || extension == "py" {
+                if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                    if extension == "rs" {
+                        let mut ts_parser = tree_sitter::Parser::new();
+                        if ts_parser.set_language(tree_sitter_rust::language()).is_ok() {
+                            if let Some(tree) = ts_parser.parse(&content, None) {
+                                walk_node_for_identifiers(tree.root_node(), &content, used_set);
+                            }
+                        }
+                    } else {
+                        let re = regex::Regex::new(r"\b[a-zA-Z_]\w*\b").unwrap();
+                        for cap in re.captures_iter(&content) {
+                            used_set.insert(cap[0].to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn walk_node_for_identifiers(node: tree_sitter::Node, source: &str, used_set: &mut std::collections::HashSet<String>) {
+    let kind = node.kind();
+    if kind == "identifier" || kind == "type_identifier" || kind == "scoped_identifier" || kind == "field_identifier" {
+        let mut is_definition = false;
+        if let Some(parent) = node.parent() {
+            if let Some(name_node) = parent.child_by_field_name("name") {
+                if name_node.start_byte() == node.start_byte() && name_node.end_byte() == node.end_byte() {
+                    is_definition = true;
+                }
+            }
+        }
+
+        if !is_definition {
+            if let Ok(text) = node.utf8_text(source.as_bytes()) {
+                let t = text.trim().to_string();
+                if !t.is_empty() {
+                    used_set.insert(t);
+                }
+            }
+        }
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_node_for_identifiers(cursor.node(), source, used_set);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     std::panic::set_hook(Box::new(|info| {
@@ -517,6 +641,7 @@ async fn main() {
         state: Arc::new(Mutex::new(Hfsm::new())),
         root_path: Arc::new(Mutex::new(None)),
         locale: Arc::new(Mutex::new("en".to_string())),
+        issues_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
     });
 
     Server::new(stdin, stdout, messages).serve(service).await;

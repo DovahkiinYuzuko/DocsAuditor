@@ -11,5 +11,6 @@
   "report_header": "Tuvastati järgmised lahknevused spetsifikatsioonide ja koodi vahel. Palun parandage iga punkt.\n\n",
   "report_section_title": "## Lahknevused (TODO)\n\n",
   "code_action_title": "Lisa reanumbrid {0} automaatselt spetsifikatsioonile",
-  "dependency_not_used": "Spetsifikatsioonis määratletud sõltuvust '{1}' ei kasutata sümbolis '{0}'."
+  "dependency_not_used": "Spetsifikatsioonis määratletud sõltuvust '{1}' ei kasutata sümbolis '{0}'.",
+  "dead_code": "Spetsifikatsioonis määratletud sümbolile '{0}' ei viidata projektis kusagil (surnud kood)."
 }

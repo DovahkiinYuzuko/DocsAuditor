@@ -12,6 +12,7 @@ LSPサーバーの実体。
   - `state: std::sync::Arc<tokio::sync::Mutex<crate::state::hfsm::Hfsm>>` - サーバー状態をスレッド安全に管理するHFSMインスタンス。
   - `root_path: Arc<Mutex<Option<PathBuf>>>` - ワークスペースルートパス。
   - `locale: Arc<Mutex<String>>` - クライアントの言語ロケール設定。
+  - `issues_cache: Arc<Mutex<std::collections::HashMap<url::Url, Vec<crate::auditor::AuditIssue>>>>` - 各ファイルごとの最新監査エラー結果を保持するキャッシュ。Windows環境のドライブレター大文字小文字の違いによる二重登録を防ぐため、キーのUrlはドライブレター部分を小文字に正規化して使用する。
 
 ## 関数定義
 
@@ -42,6 +43,36 @@ LSPサーバーの実体。
 - **`did_open` / `did_change` / `did_save`**: 変更されたドキュメントのテキストを取得し、`on_change` を呼び出して監査を実行する。
 - **`code_action`**: 整合性エラー（特に行番号不足やミスマッチ）のある箇所に対し、行番号を自動挿入する Code Action（WorkspaceEditによるテキスト変更）を生成してクライアントに提供する。
 
+### `collect_project_used_symbols`
+- **引数**:
+  - `dir: &Path` - プロジェクトルートなどの走査開始ディレクトリ。
+- **戻り値**: `std::collections::HashSet<String>` (非同期)
+- **説明**:
+  - プロジェクト内のソースファイルから使用されているすべての識別子を収集する。
+  - `collect_used_symbols_in_dir_recursive` を呼び出す。
+
+### `collect_used_symbols_in_dir_recursive`
+- **引数**:
+  - `dir: &Path` - 走査対象ディレクトリ。
+  - `used_set: &mut std::collections::HashSet<String>` - 収集した識別子を格納するセット。
+- **戻り値**: `void` (非同期)
+- **説明**:
+  - `target`, `node_modules`, `docs`, `.git` ディレクトリを除外して再帰的に走査する。
+  - 拡張子が `rs`, `ts`, `js`, `py` のファイルを処理する。
+  - `rs` ファイルは tree-sitter Rust parser で構文解析し、`walk_node_for_identifiers` を呼び出す。
+  - その他の言語は正規表現で簡易的に識別子を取り出す。
+
+### `walk_node_for_identifiers`
+- **引数**:
+  - `node: tree_sitter::Node` - 現在の構文ノード。
+  - `source: &str` - ソースコード文字列。
+  - `used_set: &mut std::collections::HashSet<String>` - 使用識別子セット。
+- **戻り値**: `void`
+- **説明**:
+  - `identifier` や `type_identifier` 等の識別子ノードを抽出し、`used_set` に追加する。
+  - ただし、関数定義や構造体定義そのものの定義名（親ノードの `name` フィールドに紐づくノード）は、自分自身の定義による使用中誤検知を防ぐため、除外する。
+  - 再帰的に子ノードを探索する。
+
 ## 依存関係マッピング (Dependency Mapping)
 
 ```mermaid
@@ -51,10 +82,15 @@ graph TD
     on_change --> Hfsm
     on_change --> parser::parse_markdown_spec
     on_change --> parser::parse_rust_code
+    on_change --> collect_project_used_symbols
     on_change --> auditor::audit_symbols
     on_change --> i18n::get_message
     code_action --> i18n::get_message
+    collect_project_used_symbols --> collect_used_symbols_in_dir_recursive
+    collect_used_symbols_in_dir_recursive --> walk_node_for_identifiers
 ```
 
 ## 影響範囲 (Impact Scope)
 - `main.rs` の hello world 実装からの大幅な書き換え。モジュール全体の起動基盤となる。
+- デッドコード（未使用コード）を検出するため、プロジェクト全体のファイルIOとtree-sitterパースが追加される。
+

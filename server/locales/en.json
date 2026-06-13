@@ -11,5 +11,6 @@
   "report_header": "The following inconsistencies between the specifications and the code were detected. Please correct each item.\n\n",
   "report_section_title": "## Inconsistent Items (TODO)\n\n",
   "code_action_title": "Automatically append line numbers {0} to specification",
-  "dependency_not_used": "Dependency '{1}' defined in specifications is not used in symbol '{0}'."
+  "dependency_not_used": "Dependency '{1}' defined in specifications is not used in symbol '{0}'.",
+  "dead_code": "Symbol '{0}' documented in specifications is not referenced anywhere in the project (dead code)."
 }

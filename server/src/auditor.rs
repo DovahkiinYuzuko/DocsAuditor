@@ -10,6 +10,7 @@ pub enum AuditIssueType {
     LineNumberMissing,
     LineNumberMismatch,
     DependencyNotUsed,
+    DeadCode,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -22,7 +23,7 @@ pub struct AuditIssue {
     pub expected_line_range: Option<(usize, usize)>,
 }
 
-pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], locale: &str) -> Vec<AuditIssue> {
+pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], project_used_symbols: &std::collections::HashSet<String>, locale: &str) -> Vec<AuditIssue> {
     let mut issues = Vec::new();
 
     for spec in spec_symbols {
@@ -232,6 +233,21 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], l
                         }
                     }
                 }
+
+                // 5. デッドコードのチェック
+                if !project_used_symbols.contains(&spec.name) {
+                    issues.push(AuditIssue {
+                        name: spec.name.clone(),
+                        issue_type: AuditIssueType::DeadCode,
+                        message: get_message(
+                            &MessageKey::DeadCode(spec.name.clone()),
+                            locale,
+                        ),
+                        spec_line,
+                        code_line_range: code.line_range,
+                        expected_line_range: None,
+                    });
+                }
             }
         }
     }
@@ -244,6 +260,11 @@ mod tests {
     use super::*;
     use crate::parser::SymbolKind;
     use crate::parser::SymbolInfo;
+    use std::collections::HashSet;
+
+    fn make_used_set(names: &[&str]) -> HashSet<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
 
     #[test]
     fn test_audit_symbols_success() {
@@ -274,7 +295,8 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code, "ja");
+        let project_used = make_used_set(&["login"]);
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
         assert!(issues.is_empty());
     }
 
@@ -295,7 +317,8 @@ mod tests {
         ];
         let code = vec![];
 
-        let issues = audit_symbols(&spec, &code, "ja");
+        let project_used = HashSet::new();
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::MissingInCode);
         assert_eq!(issues[0].spec_line, 5);
@@ -330,7 +353,8 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code, "ja");
+        let project_used = make_used_set(&["timeout"]);
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::TypeMismatch);
         assert_eq!(issues[0].spec_line, 10);
@@ -365,7 +389,8 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code, "ja");
+        let project_used = make_used_set(&["login"]);
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::LineNumberMismatch);
         assert_eq!(issues[0].spec_line, 4);
@@ -400,7 +425,8 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code, "ja");
+        let project_used = make_used_set(&["on_change"]);
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
         assert!(issues.is_empty());
     }
 
@@ -433,9 +459,46 @@ mod tests {
             }
         ];
 
-        let issues = audit_symbols(&spec, &code, "ja");
+        let project_used = make_used_set(&["on_change"]);
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].issue_type, AuditIssueType::DependencyNotUsed);
         assert_eq!(issues[0].spec_line, 5);
+    }
+
+    #[test]
+    fn test_audit_symbols_dead_code() {
+        let spec = vec![
+            SymbolInfo {
+                name: "unused_func".to_string(),
+                kind: SymbolKind::Function,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: Some((1, 10)),
+                spec_line: Some(3),
+                dependencies: None,
+                used_symbols: None,
+            }
+        ];
+        let code = vec![
+            SymbolInfo {
+                name: "unused_func".to_string(),
+                kind: SymbolKind::Function,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: Some((1, 10)),
+                spec_line: None,
+                dependencies: None,
+                used_symbols: None,
+            }
+        ];
+
+        let project_used = HashSet::new();
+        let issues = audit_symbols(&spec, &code, &project_used, "ja");
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].issue_type, AuditIssueType::DeadCode);
+        assert_eq!(issues[0].spec_line, 3);
     }
 }

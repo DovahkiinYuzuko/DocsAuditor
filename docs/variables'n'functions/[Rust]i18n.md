@@ -19,6 +19,7 @@ LSPサーバーが出力する警告（Diagnostics）、コードアクション
   - `LineNumberMissing(String)` - 行番号未記載（シンボル名）
   - `LineNumberMismatch(String, String, String)` - 行番号不一致（シンボル名, 仕様書の行, コードの行）
   - `DependencyNotUsed(String, String)` - 仕様書の依存先がコード内で使用されていない場合（関数名, 依存先名）
+  - `DeadCode(String)` - 仕様書のシンボルがプロジェクト内で一度も参照されていない場合（シンボル名）
   - `ReportTitle` - 整合性監査レポートのタイトル
   - `ReportHeader` - 整合性監査レポートのヘッダーメッセージ
   - `ReportSectionTitle` - 整合性監査レポートのTODOセクションタイトル

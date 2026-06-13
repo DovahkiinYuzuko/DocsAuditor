@@ -11,5 +11,6 @@
   "report_header": "偵測到規範與程式碼之間存在以下不一致。請修正每個項目。\n\n",
   "report_section_title": "## 不一致項目 (TODO)\n\n",
   "code_action_title": "自動向規範追加行號 {0}",
-  "dependency_not_used": "在符號 '{0}' 中未使用規格書中定義的依賴項 '{1}'。"
+  "dependency_not_used": "在符號 '{0}' 中未使用規格書中定義的依賴項 '{1}'。",
+  "dead_code": "規格書中定義的符號 '{0}' 未在專案中的任何地方引用（無用程式碼）。"
 }
