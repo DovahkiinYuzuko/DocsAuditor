@@ -46,7 +46,9 @@ pub fn audit_symbols(spec_symbols: &[SymbolInfo], code_symbols: &[SymbolInfo], p
             }
             Some(code) => {
                 // 1. 変数/関数の種類のチェック
-                if spec.kind != code.kind {
+                // 仕様書側が「マップのピン」方式で型詳細情報を持たない場合は、種類ミスマッチエラーとしない
+                let has_spec_type_info = spec.params.is_some() || spec.return_type.is_some() || spec.var_type.is_some();
+                if has_spec_type_info && spec.kind != code.kind {
                     issues.push(AuditIssue {
                         name: spec.name.clone(),
                         issue_type: AuditIssueType::TypeMismatch,

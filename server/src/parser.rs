@@ -528,16 +528,40 @@ fn extract_go_short_var_info(node: Node, source: &str, symbols: &mut Vec<SymbolI
 pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
     let mut symbols = Vec::new();
     
-    // 1. 変数や関数の宣言情報を抽出する
+    // 3段目の見出し `### `シンボル名`` または `### `シンボル名` (Lxx-xx)` にマッチする正規表現
+    // バッククォートの後にスペースや他の文字（(構造体)など）があるものは除外するため、
+    // 行番号以外の文字がバッククォートの後ろに存在しないことを保証する
+    let heading_regex = Regex::new(r"^###\s+`([^`]+)`(?:\s*\(L(\d+)(?:-(\d+))?\))?\s*$").unwrap();
+    
+    // 1. 変数や関数の見出しから宣言情報を抽出する
     for (idx, line) in content.lines().enumerate() {
         let physical_line = idx + 1;
         let trimmed = line.trim();
         
-        if trimmed.starts_with('-') || trimmed.starts_with('*') {
-            let item_content = trimmed[1..].trim();
-            if let Some(mut sym) = parse_spec_line(item_content) {
-                sym.spec_line = Some(physical_line);
-                symbols.push(sym);
+        if trimmed.starts_with("###") {
+            if let Some(caps) = heading_regex.captures(trimmed) {
+                let name = caps.get(1).unwrap().as_str().to_string();
+                let mut line_range = None;
+                
+                if let Some(start_cap) = caps.get(2) {
+                    let start = start_cap.as_str().parse::<usize>().unwrap();
+                    let end = caps.get(3)
+                        .map(|m| m.as_str().parse::<usize>().unwrap())
+                        .unwrap_or(start);
+                    line_range = Some((start, end));
+                }
+                
+                symbols.push(SymbolInfo {
+                    name,
+                    kind: SymbolKind::Function, // デフォルトでFunction。型情報がないため kind ミスマッチは auditor 側でスキップする
+                    params: None,
+                    return_type: None,
+                    var_type: None,
+                    line_range,
+                    spec_line: Some(physical_line),
+                    dependencies: None,
+                    used_symbols: None,
+                });
             }
         }
     }
@@ -578,84 +602,6 @@ pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
     }
 
     symbols
-}
-
-fn parse_spec_line(line: &str) -> Option<SymbolInfo> {
-    let trimmed = line.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // 行番号記述 (L10-20) または (L10) を抽出
-    let line_regex = Regex::new(r"\(L(\d+)(?:-(\d+))?\)\s*$").unwrap();
-    let mut line_range = None;
-    let mut clean_line = trimmed.to_string();
-
-    if let Some(caps) = line_regex.captures(trimmed) {
-        let start = caps.get(1).unwrap().as_str().parse::<usize>().unwrap();
-        let end = caps.get(2)
-            .map(|m| m.as_str().parse::<usize>().unwrap())
-            .unwrap_or(start);
-        line_range = Some((start, end));
-        clean_line = line_regex.replace(trimmed, "").trim().to_string();
-    }
-
-    // 関数のパース: fn name(param: type, ...) -> ret_type
-    let fn_regex = Regex::new(r"^fn\s+(\w+)\s*(?:\((.*?)\))?\s*(?:->\s*([^\s{]+))?").unwrap();
-    if let Some(caps) = fn_regex.captures(&clean_line) {
-        let name = caps.get(1).unwrap().as_str().to_string();
-        
-        let params = caps.get(2).map(|m| {
-            let p_str = m.as_str();
-            if p_str.trim().is_empty() {
-                Vec::new()
-            } else {
-                p_str.split(',')
-                    .map(|p| {
-                        let parts: Vec<&str> = p.split(':').collect();
-                        let p_name = parts.get(0).unwrap_or(&"").trim().to_string();
-                        let p_type = parts.get(1).unwrap_or(&"").trim().to_string();
-                        (p_name, p_type)
-                    })
-                    .collect()
-            }
-        });
-
-        let return_type = caps.get(3).map(|m| m.as_str().to_string());
-
-        return Some(SymbolInfo {
-            name,
-            kind: SymbolKind::Function,
-            params,
-            return_type,
-            var_type: None,
-            line_range,
-            spec_line: None,
-            dependencies: None,
-            used_symbols: None,
-        });
-    }
-
-    // 変数・定数のパース: let name: type または const name: type
-    let var_regex = Regex::new(r"^(?:let|const|static)\s+(\w+)\s*(?::\s*([^\s=]+))?").unwrap();
-    if let Some(caps) = var_regex.captures(&clean_line) {
-        let name = caps.get(1).unwrap().as_str().to_string();
-        let var_type = caps.get(2).map(|m| m.as_str().to_string());
-
-        return Some(SymbolInfo {
-            name,
-            kind: SymbolKind::Variable,
-            params: None,
-            return_type: None,
-            var_type,
-            line_range,
-            spec_line: None,
-            dependencies: None,
-            used_symbols: None,
-        });
-    }
-
-    None
 }
 
 pub fn parse_rust_code(code: &str) -> Vec<SymbolInfo> {
@@ -1721,9 +1667,15 @@ mod tests {
     #[test]
     fn test_parse_markdown_spec() {
         let md = r#"# Test Spec
-- fn hello(user: String) -> Result (L10-20)
-- let timeout: u64 (L30)
-- invalid item without fn or let
+## 関数定義
+
+### `hello`
+- **引数**:
+  - `user: String`
+
+### `timeout` (L30)
+
+### `FileLocker` (構造体)
 
 ```mermaid
 graph TD
@@ -1732,23 +1684,19 @@ graph TD
 ```
 "#;
         let symbols = parse_markdown_spec(md);
+        // `FileLocker` はカテゴリ (構造体) があるので除外され、hello と timeout の2つだけが抽出される
         assert_eq!(symbols.len(), 2);
 
-        // 1つ目のシンボル (Function)
+        // 1つ目のシンボル
         assert_eq!(symbols[0].name, "hello");
-        assert_eq!(symbols[0].kind, SymbolKind::Function);
-        assert_eq!(symbols[0].params, Some(vec![("user".to_string(), "String".to_string())]));
-        assert_eq!(symbols[0].return_type, Some("Result".to_string()));
-        assert_eq!(symbols[0].line_range, Some((10, 20)));
-        assert_eq!(symbols[0].spec_line, Some(2)); // 2行目
+        assert_eq!(symbols[0].line_range, None);
+        assert_eq!(symbols[0].spec_line, Some(4)); // 4行目 (### `hello`)
         assert_eq!(symbols[0].dependencies, Some(vec!["parser::parse_markdown_spec".to_string(), "Hfsm".to_string()]));
 
-        // 2つ目のシンボル (Variable)
+        // 2つ目のシンボル
         assert_eq!(symbols[1].name, "timeout");
-        assert_eq!(symbols[1].kind, SymbolKind::Variable);
-        assert_eq!(symbols[1].var_type, Some("u64".to_string()));
         assert_eq!(symbols[1].line_range, Some((30, 30)));
-        assert_eq!(symbols[1].spec_line, Some(3)); // 3行目
+        assert_eq!(symbols[1].spec_line, Some(8)); // 8行目 (### `timeout` (L30))
     }
 
     #[test]
