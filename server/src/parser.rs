@@ -26,6 +26,12 @@ pub fn parse_code(code: &str, lang: &str) -> Vec<SymbolInfo> {
         "typescript" | "ts" | "tsx" | "javascript" | "js" | "jsx" => parse_typescript_code(code),
         "python" | "py" => parse_python_code(code),
         "go" => parse_go_code(code),
+        "c" => parse_c_code(code),
+        "cpp" => parse_cpp_code(code),
+        "csharp" => parse_csharp_code(code),
+        "ruby" => parse_ruby_code(code),
+        "swift" => parse_swift_code(code),
+        "kotlin" => parse_kotlin_code(code),
         _ => Vec::new(),
     }
 }
@@ -789,6 +795,795 @@ fn extract_variable_info(node: Node, source: &str) -> Option<SymbolInfo> {
     })
 }
 
+pub fn parse_c_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_c::language()).expect("Failed to load C language");
+    let tree = parser.parse(code, None).expect("Failed to parse C code");
+    let mut symbols = Vec::new();
+    walk_c_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_c_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "function_definition" {
+        if let Some(sym) = extract_c_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "declaration" {
+        extract_c_variable_info(node, source, symbols);
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_c_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_c_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let decl_node = node.child_by_field_name("declarator")?;
+    
+    let mut fn_declarator = decl_node;
+    while fn_declarator.kind() == "pointer_declarator" {
+        fn_declarator = fn_declarator.child_by_field_name("declarator")?;
+    }
+    
+    let name_node = fn_declarator.child_by_field_name("declarator")?;
+    let name = name_node.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+    
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let return_type = node.child_by_field_name("type")
+        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+        .map(|t| t.trim().to_string());
+        
+    let mut params = Vec::new();
+    if let Some(params_node) = fn_declarator.child_by_field_name("parameters") {
+        let mut cursor = params_node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                if child.kind() == "parameter_declaration" {
+                    let type_str = child.child_by_field_name("type")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_else(|| "any".to_string());
+                    
+                    let param_name = child.child_by_field_name("declarator")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_else(|| "".to_string());
+                        
+                    if !param_name.is_empty() {
+                        params.push((param_name, type_str));
+                    }
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Function,
+        params: Some(params),
+        return_type,
+        var_type: None,
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols,
+    })
+}
+
+fn extract_c_variable_info(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let type_str = match node.child_by_field_name("type") {
+        Some(t_node) => t_node.utf8_text(source.as_bytes()).ok().map(|t| t.trim().to_string()),
+        None => return,
+    };
+    
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "init_declarator" {
+                if let Some(decl_node) = child.child_by_field_name("declarator") {
+                    let mut actual_decl = decl_node;
+                    while actual_decl.kind() == "pointer_declarator" {
+                        actual_decl = actual_decl.child_by_field_name("declarator").unwrap_or(actual_decl);
+                    }
+                    if let Ok(name) = actual_decl.utf8_text(source.as_bytes()) {
+                        let name_str = name.trim().to_string();
+                        let mut used_set = std::collections::HashSet::new();
+                        collect_used_symbols(child, source, &mut used_set);
+                        used_set.remove(&name_str);
+                        
+                        symbols.push(SymbolInfo {
+                            name: name_str,
+                            kind: SymbolKind::Variable,
+                            params: None,
+                            return_type: None,
+                            var_type: type_str.clone(),
+                            line_range: Some((start_line, end_line)),
+                            spec_line: None,
+                            dependencies: None,
+                            used_symbols: Some(used_set.into_iter().collect()),
+                        });
+                    }
+                }
+            } else if child.kind() == "identifier" {
+                if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                    let name_str = name.trim().to_string();
+                    symbols.push(SymbolInfo {
+                        name: name_str,
+                        kind: SymbolKind::Variable,
+                        params: None,
+                        return_type: None,
+                        var_type: type_str.clone(),
+                        line_range: Some((start_line, end_line)),
+                        spec_line: None,
+                        dependencies: None,
+                        used_symbols: Some(Vec::new()),
+                    });
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+pub fn parse_cpp_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_cpp::language()).expect("Failed to load C++ language");
+    let tree = parser.parse(code, None).expect("Failed to parse C++ code");
+    let mut symbols = Vec::new();
+    walk_cpp_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_cpp_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "function_definition" {
+        if let Some(sym) = extract_cpp_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "declaration" {
+        extract_cpp_variable_info(node, source, symbols);
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_cpp_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_cpp_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    extract_c_function_info(node, source)
+}
+
+fn extract_cpp_variable_info(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    extract_c_variable_info(node, source, symbols);
+}
+
+pub fn parse_csharp_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_c_sharp::language()).expect("Failed to load C# language");
+    let tree = parser.parse(code, None).expect("Failed to parse C# code");
+    let mut symbols = Vec::new();
+    walk_csharp_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_csharp_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "method_declaration" {
+        if let Some(sym) = extract_csharp_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "variable_declaration" || kind == "field_declaration" {
+        extract_csharp_variable_info(node, source, symbols);
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_csharp_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_csharp_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let name_node = node.child_by_field_name("name")?;
+    let name = name_node.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+    
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let return_type = node.child_by_field_name("type")
+        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+        .map(|t| t.trim().to_string());
+        
+    let mut params = Vec::new();
+    if let Some(params_node) = node.child_by_field_name("parameters") {
+        let mut cursor = params_node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                if child.kind() == "parameter" {
+                    let type_str = child.child_by_field_name("type")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_else(|| "any".to_string());
+                    
+                    let param_name = child.child_by_field_name("name")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_else(|| "".to_string());
+                        
+                    if !param_name.is_empty() {
+                        params.push((param_name, type_str));
+                    }
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Function,
+        params: Some(params),
+        return_type,
+        var_type: None,
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols,
+    })
+}
+
+fn extract_csharp_variable_info(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    // node が field_declaration の場合は、まず内部の variable_declaration を探す
+    let target_node = if node.kind() == "field_declaration" {
+        node.child_by_field_name("declaration").unwrap_or(node)
+    } else {
+        node
+    };
+
+    let type_str = target_node.child_by_field_name("type")
+        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+        .map(|t| t.trim().to_string());
+        
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let mut cursor = target_node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "variable_declarator" {
+                let name_node = child.child_by_field_name("name")
+                    .or_else(|| child.child(0)); // name フィールドが無い場合は最初の子 (通常 identifier)
+                if let Some(n_node) = name_node {
+                    if let Ok(name) = n_node.utf8_text(source.as_bytes()) {
+                        let name_str = name.trim().to_string();
+                        let mut used_set = std::collections::HashSet::new();
+                        collect_used_symbols(child, source, &mut used_set);
+                        used_set.remove(&name_str);
+                        
+                        symbols.push(SymbolInfo {
+                            name: name_str,
+                            kind: SymbolKind::Variable,
+                            params: None,
+                            return_type: None,
+                            var_type: type_str.clone(),
+                            line_range: Some((start_line, end_line)),
+                            spec_line: None,
+                            dependencies: None,
+                            used_symbols: Some(used_set.into_iter().collect()),
+                        });
+                    }
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+pub fn parse_ruby_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_ruby::language()).expect("Failed to load Ruby language");
+    let tree = parser.parse(code, None).expect("Failed to parse Ruby code");
+    let mut symbols = Vec::new();
+    walk_ruby_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_ruby_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "method" {
+        if let Some(sym) = extract_ruby_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "assignment" {
+        if let Some(sym) = extract_ruby_variable_info(node, source) {
+            symbols.push(sym);
+        }
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_ruby_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_ruby_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let name_node = node.child_by_field_name("name")?;
+    let name = name_node.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+    
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let mut params = Vec::new();
+    if let Some(params_node) = node.child_by_field_name("parameters") {
+        let mut cursor = params_node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                if child.kind() == "identifier" {
+                    if let Ok(p_name) = child.utf8_text(source.as_bytes()) {
+                        params.push((p_name.trim().to_string(), "any".to_string()));
+                    }
+                } else if child.kind() == "formal_parameters" {
+                    let mut sub_cursor = child.walk();
+                    if sub_cursor.goto_first_child() {
+                        loop {
+                            let sub_child = sub_cursor.node();
+                            if sub_child.kind() == "identifier" {
+                                if let Ok(p_name) = sub_child.utf8_text(source.as_bytes()) {
+                                    params.push((p_name.trim().to_string(), "any".to_string()));
+                                }
+                            }
+                            if !sub_cursor.goto_next_sibling() {
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Function,
+        params: Some(params),
+        return_type: Some("any".to_string()),
+        var_type: None,
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols,
+    })
+}
+
+fn extract_ruby_variable_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let left_node = node.child_by_field_name("left")?;
+    let name = left_node.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+    
+    if left_node.kind() != "identifier" && left_node.kind() != "instance_variable" {
+        return None;
+    }
+    
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Variable,
+        params: None,
+        return_type: None,
+        var_type: Some("any".to_string()),
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols: Some(used_set.into_iter().collect()),
+    })
+}
+
+pub fn parse_swift_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_swift::language()).expect("Failed to load Swift language");
+    let tree = parser.parse(code, None).expect("Failed to parse Swift code");
+    let mut symbols = Vec::new();
+    walk_swift_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_swift_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "function_declaration" {
+        if let Some(sym) = extract_swift_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "variable_declaration" || kind == "constant_declaration" || kind == "property_declaration" {
+        extract_swift_variable_info(node, source, symbols);
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_swift_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_swift_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let mut name = String::new();
+    let mut return_type = None;
+    let mut params = Vec::new();
+    let mut has_parameters = false;
+    
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "simple_identifier" && name.is_empty() {
+                name = child.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+            } else if child.kind() == "parameter" {
+                has_parameters = true;
+                let mut p_name = String::new();
+                let mut p_type = "any".to_string();
+                
+                let mut sub_cursor = child.walk();
+                if sub_cursor.goto_first_child() {
+                    loop {
+                        let sub_child = sub_cursor.node();
+                        let field_name = sub_cursor.field_name();
+                        if field_name == Some("name") && p_name.is_empty() {
+                            p_name = sub_child.utf8_text(source.as_bytes()).unwrap_or("").trim().to_string();
+                        } else if sub_child.kind() == "user_type" || sub_child.kind().contains("type") {
+                            p_type = sub_child.utf8_text(source.as_bytes()).unwrap_or("any").trim().to_string();
+                        }
+                        if !sub_cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                }
+                if !p_name.is_empty() {
+                    params.push((p_name, p_type));
+                }
+            } else if (child.kind() == "user_type" || child.kind().contains("type")) && has_parameters {
+                return_type = Some(child.utf8_text(source.as_bytes()).ok()?.trim().to_string());
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    if name.is_empty() {
+        return None;
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Function,
+        params: Some(params),
+        return_type,
+        var_type: None,
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols,
+    })
+}
+
+fn extract_swift_variable_info(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let mut name_opt = None;
+    let mut type_opt = None;
+    
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "pattern" {
+                let mut sub_cursor = child.walk();
+                let mut found = false;
+                if sub_cursor.goto_first_child() {
+                    loop {
+                        let sub_child = sub_cursor.node();
+                        if sub_child.kind() == "bound_identifier" {
+                            if let Some(simple_id) = sub_child.child(0) {
+                                if simple_id.kind() == "simple_identifier" {
+                                    name_opt = Some(simple_id.utf8_text(source.as_bytes()).unwrap_or("").trim().to_string());
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if !sub_cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    if let Ok(n) = child.utf8_text(source.as_bytes()) {
+                        name_opt = Some(n.trim().to_string());
+                    }
+                }
+            } else if child.kind() == "type_annotation" {
+                let mut sub_cursor = child.walk();
+                if sub_cursor.goto_first_child() {
+                    loop {
+                        let sub_child = sub_cursor.node();
+                        if sub_child.kind() == "user_type" || sub_child.kind().contains("type") {
+                            type_opt = Some(sub_child.utf8_text(source.as_bytes()).unwrap_or("").trim().to_string());
+                            break;
+                        }
+                        if !sub_cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+    
+    if let Some(name) = name_opt {
+        let mut used_set = std::collections::HashSet::new();
+        collect_used_symbols(node, source, &mut used_set);
+        used_set.remove(&name);
+        
+        symbols.push(SymbolInfo {
+            name,
+            kind: SymbolKind::Variable,
+            params: None,
+            return_type: None,
+            var_type: type_opt,
+            line_range: Some((start_line, end_line)),
+            spec_line: None,
+            dependencies: None,
+            used_symbols: Some(used_set.into_iter().collect()),
+        });
+    }
+}
+
+pub fn parse_kotlin_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_kotlin::language()).expect("Failed to load Kotlin language");
+    let tree = parser.parse(code, None).expect("Failed to parse Kotlin code");
+    let mut symbols = Vec::new();
+    walk_kotlin_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_kotlin_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "function_declaration" {
+        if let Some(sym) = extract_kotlin_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "property_declaration" {
+        extract_kotlin_variable_info(node, source, symbols);
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_kotlin_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_kotlin_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let mut name = String::new();
+    let mut return_type = None;
+    let mut params_node = None;
+    
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "simple_identifier" && name.is_empty() {
+                name = child.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+            } else if child.kind() == "function_value_parameters" {
+                params_node = Some(child);
+            } else if child.kind() == "user_type" || child.kind().contains("type") {
+                if params_node.is_some() {
+                    return_type = Some(child.utf8_text(source.as_bytes()).ok()?.trim().to_string());
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    if name.is_empty() {
+        return None;
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let mut params = Vec::new();
+    if let Some(pn) = params_node {
+        let mut cursor = pn.walk();
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                if child.kind() == "parameter" {
+                    let mut p_name = String::new();
+                    let mut p_type = "any".to_string();
+                    
+                    let mut sub_cursor = child.walk();
+                    if sub_cursor.goto_first_child() {
+                        loop {
+                            let sub_child = sub_cursor.node();
+                            if sub_child.kind() == "simple_identifier" {
+                                p_name = sub_child.utf8_text(source.as_bytes()).unwrap_or("").trim().to_string();
+                            } else if sub_child.kind() == "user_type" || sub_child.kind().contains("type") {
+                                p_type = sub_child.utf8_text(source.as_bytes()).unwrap_or("any").trim().to_string();
+                            }
+                            if !sub_cursor.goto_next_sibling() {
+                                break;
+                            }
+                        }
+                    }
+                    if !p_name.is_empty() {
+                        params.push((p_name, p_type));
+                    }
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Function,
+        params: Some(params),
+        return_type,
+        var_type: None,
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols,
+    })
+}
+
+fn extract_kotlin_variable_info(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let mut name_opt = None;
+    let mut type_opt = None;
+    
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "variable_declaration" {
+                let mut sub_cursor = child.walk();
+                if sub_cursor.goto_first_child() {
+                    loop {
+                        let sub_child = sub_cursor.node();
+                        if sub_child.kind() == "simple_identifier" {
+                            name_opt = Some(sub_child.utf8_text(source.as_bytes()).unwrap_or("").trim().to_string());
+                        } else if sub_child.kind() == "user_type" || sub_child.kind().contains("type") {
+                            type_opt = Some(sub_child.utf8_text(source.as_bytes()).unwrap_or("").trim().to_string());
+                        }
+                        if !sub_cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+    
+    if let Some(name) = name_opt {
+        let mut used_set = std::collections::HashSet::new();
+        collect_used_symbols(node, source, &mut used_set);
+        used_set.remove(&name);
+        
+        symbols.push(SymbolInfo {
+            name,
+            kind: SymbolKind::Variable,
+            params: None,
+            return_type: None,
+            var_type: type_opt,
+            line_range: Some((start_line, end_line)),
+            spec_line: None,
+            dependencies: None,
+            used_symbols: Some(used_set.into_iter().collect()),
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -927,5 +1722,146 @@ func AddValues(x, y int) int {
         
         let short_var = symbols.iter().find(|s| s.name == "z").unwrap();
         assert_eq!(short_var.kind, SymbolKind::Variable);
+    }
+
+    #[test]
+    fn test_parse_c_code() {
+        let code = r#"
+int max_limit = 200;
+int calculate_area(int width, int height) {
+    return width * height;
+}
+        "#;
+        let symbols = parse_c_code(code);
+        assert_eq!(symbols.len(), 2);
+        
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "calculate_area");
+        assert_eq!(func.params, Some(vec![("width".to_string(), "int".to_string()), ("height".to_string(), "int".to_string())]));
+        assert_eq!(func.return_type, Some("int".to_string()));
+        
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "max_limit");
+        assert_eq!(var.var_type, Some("int".to_string()));
+    }
+
+    #[test]
+    fn test_parse_cpp_code() {
+        let code = r#"
+double pi = 3.14159;
+double compute_circle(double radius) {
+    return pi * radius * radius;
+}
+        "#;
+        let symbols = parse_cpp_code(code);
+        assert_eq!(symbols.len(), 2);
+        
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "compute_circle");
+        assert_eq!(func.params, Some(vec![("radius".to_string(), "double".to_string())]));
+        assert_eq!(func.return_type, Some("double".to_string()));
+        
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "pi");
+        assert_eq!(var.var_type, Some("double".to_string()));
+    }
+
+    #[test]
+    fn test_parse_csharp_code() {
+        let code = r#"
+class Demo {
+    private static int DefaultScore = 100;
+    public int Process(string input, int factor) {
+        return factor * 2;
+    }
+}
+        "#;
+        let mut parser = TsParser::new();
+        parser.set_language(tree_sitter_c_sharp::language()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        println!("CSHARP AST: {}", tree.root_node().to_sexp());
+
+        let symbols = parse_csharp_code(code);
+        assert_eq!(symbols.len(), 2);
+        
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "Process");
+        assert_eq!(func.params, Some(vec![("input".to_string(), "string".to_string()), ("factor".to_string(), "int".to_string())]));
+        assert_eq!(func.return_type, Some("int".to_string()));
+        
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "DefaultScore");
+        assert_eq!(var.var_type, Some("int".to_string()));
+    }
+
+    #[test]
+    fn test_parse_ruby_code() {
+        let code = r#"
+api_key = "secret"
+def perform_request(url, timeout)
+    puts url
+end
+        "#;
+        let symbols = parse_ruby_code(code);
+        assert_eq!(symbols.len(), 2);
+        
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "perform_request");
+        assert_eq!(func.params, Some(vec![("url".to_string(), "any".to_string()), ("timeout".to_string(), "any".to_string())]));
+        
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "api_key");
+    }
+
+    #[test]
+    fn test_parse_swift_code() {
+        let code = r#"
+let greeting: String = "Hello"
+func performAction(action: String, retries: Int) -> Bool {
+    return true;
+}
+        "#;
+        let mut parser = TsParser::new();
+        parser.set_language(tree_sitter_swift::language()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        println!("SWIFT AST: {}", tree.root_node().to_sexp());
+
+        let symbols = parse_swift_code(code);
+        assert_eq!(symbols.len(), 2);
+        
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "performAction");
+        assert_eq!(func.params, Some(vec![("action".to_string(), "String".to_string()), ("retries".to_string(), "Int".to_string())]));
+        assert_eq!(func.return_type, Some("Bool".to_string()));
+        
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "greeting");
+        assert_eq!(var.var_type, Some("String".to_string()));
+    }
+
+    #[test]
+    fn test_parse_kotlin_code() {
+        let code = r#"
+val appName: String = "Auditor"
+fun updateStatus(status: String, code: Int): Boolean {
+    return false;
+}
+        "#;
+        let mut parser = TsParser::new();
+        parser.set_language(tree_sitter_kotlin::language()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        println!("KOTLIN AST: {}", tree.root_node().to_sexp());
+
+        let symbols = parse_kotlin_code(code);
+        assert_eq!(symbols.len(), 2);
+        
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "updateStatus");
+        assert_eq!(func.params, Some(vec![("status".to_string(), "String".to_string()), ("code".to_string(), "Int".to_string())]));
+        assert_eq!(func.return_type, Some("Boolean".to_string()));
+        
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "appName");
+        assert_eq!(var.var_type, Some("String".to_string()));
     }
 }

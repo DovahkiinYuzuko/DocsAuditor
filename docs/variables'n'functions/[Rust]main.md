@@ -32,7 +32,7 @@ LSPサーバーの実体。
 - **説明**:
   - ドキュメント変更時（`did_open`, `did_change`, `did_save`）に呼び出される非同期ヘルパー。
   - HFSMの状態を `DocumentChanged` に遷移させる。
-  - 対象ファイルが仕様書かコードかを判別し、対になるファイルと言語（"rust", "typescript", "python", "go" など）を特定する。
+  - 対象ファイルが仕様書かコードかを判別し、対になるファイルと言語（"rust", "typescript", "python", "go", "c", "cpp", "csharp", "ruby", "swift", "kotlin" など）を特定する。
   - 整合性照合のため、仕様書側は `parser::parse_markdown_spec` でパースし、コード側は `parser::parse_code(&code_text, &lang)` を用いて対象言語のAST解析を実行する。
   - 照合結果からエラーがあれば、`locale` 情報に応じた `i18n` 翻訳メッセージを作成し、クライアントに対して `publish_diagnostics` を発行してエラー波線を表示する。
   - 同様に `variables_functions_audit_report.md` をロケールに合わせて生成/削除する。
@@ -60,9 +60,8 @@ LSPサーバーの実体。
 - **戻り値**: `void` (非同期)
 - **説明**:
   - `target`, `node_modules`, `docs`, `.git` ディレクトリを除外して再帰的に走査する。
-  - 拡張子が `rs`, `ts`, `js`, `py`, `go` のファイルを処理する。
-  - `rs` ファイルは tree-sitter Rust parser で構文解析し、`walk_node_for_identifiers` を呼び出す。
-  - その他の言語は正規表現で簡易的に識別子を取り出す。
+  - 拡張子が `rs`, `ts`, `js`, `py`, `go`, `c`, `h`, `cpp`, `hpp`, `cc`, `cxx`, `cs`, `rb`, `swift`, `kt`, `kts` のファイルを処理する。
+  - `rs` ファイルは tree-sitter Rust parser で構文解析し、`walk_node_for_identifiers` を呼び出す（他の言語も必要に応じてパーサーによる厳密な抽出を行うか、正規表現で簡易的に識別子を取り出す）。
 
 ### `walk_node_for_identifiers`
 - **引数**:

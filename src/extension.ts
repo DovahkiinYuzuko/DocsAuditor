@@ -73,7 +73,13 @@ export function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'typescript' },
             { scheme: 'file', language: 'javascript' },
             { scheme: 'file', language: 'python' },
-            { scheme: 'file', language: 'go' }
+            { scheme: 'file', language: 'go' },
+            { scheme: 'file', language: 'c' },
+            { scheme: 'file', language: 'cpp' },
+            { scheme: 'file', language: 'csharp' },
+            { scheme: 'file', language: 'ruby' },
+            { scheme: 'file', language: 'swift' },
+            { scheme: 'file', language: 'kotlin' }
         ],
         outputChannel: outputChannel,
         initializationOptions: {

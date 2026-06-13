@@ -200,6 +200,12 @@ impl Backend {
                             "javascript" => "js",
                             "python" => "py",
                             "go" => "go",
+                            "c" => "c",
+                            "cpp" => "cpp",
+                            "csharp" => "cs",
+                            "ruby" => "rb",
+                            "swift" => "swift",
+                            "kotlin" => "kt",
                             _ => "",
                         };
 
@@ -225,6 +231,12 @@ impl Backend {
                     "js" => "javascript".to_string(),
                     "py" => "python".to_string(),
                     "go" => "go".to_string(),
+                    "c" | "h" => "c".to_string(),
+                    "cpp" | "hpp" | "cc" | "cxx" => "cpp".to_string(),
+                    "cs" => "csharp".to_string(),
+                    "rb" => "ruby".to_string(),
+                    "swift" => "swift".to_string(),
+                    "kt" | "kts" => "kotlin".to_string(),
                     _ => "".to_string(),
                 };
                 let lang_prefix = match extension {
@@ -233,6 +245,12 @@ impl Backend {
                     "js" => "JavaScript",
                     "py" => "Python",
                     "go" => "Go",
+                    "c" | "h" => "C",
+                    "cpp" | "hpp" | "cc" | "cxx" => "CPP",
+                    "cs" => "CSharp",
+                    "rb" => "Ruby",
+                    "swift" => "Swift",
+                    "kt" | "kts" => "Kotlin",
                     _ => "",
                 };
 
@@ -584,7 +602,11 @@ async fn collect_used_symbols_in_dir_recursive(dir: &Path, used_set: &mut std::c
             Box::pin(collect_used_symbols_in_dir_recursive(&path, used_set)).await;
         } else if path.is_file() {
             let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if extension == "rs" || extension == "ts" || extension == "js" || extension == "py" || extension == "go" {
+            if extension == "rs" || extension == "ts" || extension == "js" || extension == "py" || extension == "go"
+                || extension == "c" || extension == "h" || extension == "cpp" || extension == "hpp"
+                || extension == "cc" || extension == "cxx" || extension == "cs" || extension == "rb"
+                || extension == "swift" || extension == "kt" || extension == "kts"
+            {
                 if let Ok(content) = tokio::fs::read_to_string(&path).await {
                     if extension == "rs" {
                         let mut ts_parser = tree_sitter::Parser::new();
