@@ -24,7 +24,9 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
 - **説明**:
   - 拡張機能がアクティブ化された際にVS Codeより呼び出される。
   - `"Docs Auditor"` という名前の出力チャネルを作成する。
-  - RustでビルドされたLSPサーバーバイナリのパス（通常は `server/target/release/server` またはデバッグバイナリ）を特定する。
+  - RustでビルドされたLSPサーバーバイナリのパスを特定する。
+  - 開発の利便性を高めるため、ワークスペースフォルダ（`vscode.workspace.workspaceFolders`）が存在する場合は、ワークスペース配下の `server/target/debug/server.exe` または `server/target/release/server.exe` を優先してロードする。
+  - ワークスペースが存在しない、またはバイナリが見つからない場合のみ、拡張機能インストール先内の `server/target/debug/server.exe` または `release/server.exe` を使用する。
   - サーバーの起動オプション（ServerOptions）およびクライアントオプション（LanguageClientOptions）を設定する。
   - `LanguageClientOptions` にて以下を設定：
     - `documentSelector` に Markdown、Rust、TypeScript、JavaScript、Python、Go、C、C++、C#、Ruby、Swift、Kotlin を指定し、これらのファイルの変更を監視対象とする。
@@ -33,7 +35,7 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
     - `initializationFailedHandler` を設定し、LSPサーバーの起動や初期化が失敗した際にエラーを出力チャネルへ出力し、拡張機能ホストをクラッシュさせずに安全に終了（`false` を返却）させる。
   - `LanguageClient` インスタンスを生成して起動する。
   - `docsAuditor.autoInjection` 設定変更の監視登録を行う。
-
+  
 ### `deactivate`
 - **引数**: なし
 - **戻り値**: `Thenable<void> | undefined`
@@ -52,3 +54,4 @@ graph TD
 
 ## 影響範囲 (Impact Scope)
 - 起動時の安全性が向上し、LSPサーバー起動失敗時にも拡張機能開発ホストが巻き込まれてクラッシュするのを防止します。
+- 開発時において、ワークスペース内の最新ビルド成果物を自動的に優先ロードするため、拡張機能の再インストールなしで最新の tree-sitter パーサーや監査ロジックを直ちにテスト可能になります。
