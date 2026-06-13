@@ -69,7 +69,11 @@ export function activate(context: vscode.ExtensionContext) {
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
             { scheme: 'file', language: 'markdown' },
-            { scheme: 'file', language: 'rust' }
+            { scheme: 'file', language: 'rust' },
+            { scheme: 'file', language: 'typescript' },
+            { scheme: 'file', language: 'javascript' },
+            { scheme: 'file', language: 'python' },
+            { scheme: 'file', language: 'go' }
         ],
         outputChannel: outputChannel,
         initializationOptions: {

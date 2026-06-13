@@ -184,19 +184,22 @@ impl Backend {
         let mut spec_text = text.clone();
         let mut code_text = String::new();
         let mut matched = false;
+        let mut target_lang = String::new();
 
         if is_spec {
             if let Some(file_name) = file_path.file_name().and_then(|f| f.to_str()) {
                 if file_name.starts_with('[') {
                     if let Some(end_bracket) = file_name.find(']') {
                         let lang = &file_name[1..end_bracket];
+                        target_lang = lang.to_lowercase();
                         let name_without_lang = &file_name[end_bracket + 1..file_name.len() - 3];
                         
-                        let extension = match lang.to_lowercase().as_str() {
+                        let extension = match target_lang.as_str() {
                             "rust" => "rs",
                             "typescript" => "ts",
                             "javascript" => "js",
                             "python" => "py",
+                            "go" => "go",
                             _ => "",
                         };
 
@@ -216,11 +219,20 @@ impl Backend {
             if file_path.file_name().is_some() {
                 let stem = file_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
                 let extension = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                target_lang = match extension {
+                    "rs" => "rust".to_string(),
+                    "ts" => "typescript".to_string(),
+                    "js" => "javascript".to_string(),
+                    "py" => "python".to_string(),
+                    "go" => "go".to_string(),
+                    _ => "".to_string(),
+                };
                 let lang_prefix = match extension {
                     "rs" => "Rust",
                     "ts" => "TypeScript",
                     "js" => "JavaScript",
                     "py" => "Python",
+                    "go" => "Go",
                     _ => "",
                 };
 
@@ -249,7 +261,7 @@ impl Backend {
         }
 
         let spec_symbols = parser::parse_markdown_spec(&spec_text);
-        let code_symbols = parser::parse_rust_code(&code_text);
+        let code_symbols = parser::parse_code(&code_text, &target_lang);
         let project_used = collect_project_used_symbols(&root_path).await;
         let spec_path_opt = spec_uri.to_file_path().ok();
 
@@ -572,7 +584,7 @@ async fn collect_used_symbols_in_dir_recursive(dir: &Path, used_set: &mut std::c
             Box::pin(collect_used_symbols_in_dir_recursive(&path, used_set)).await;
         } else if path.is_file() {
             let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if extension == "rs" || extension == "ts" || extension == "js" || extension == "py" {
+            if extension == "rs" || extension == "ts" || extension == "js" || extension == "py" || extension == "go" {
                 if let Ok(content) = tokio::fs::read_to_string(&path).await {
                     if extension == "rs" {
                         let mut ts_parser = tree_sitter::Parser::new();
