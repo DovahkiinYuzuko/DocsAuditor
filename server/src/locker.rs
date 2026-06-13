@@ -6,7 +6,7 @@ pub struct FileLocker {
 }
 
 impl FileLocker {
-    pub fn try_lock(target_path: &Path) -> Option<Self> {
+    pub fn try_lock(target_path: &Path) -> Option<FileLocker> {
         let lock_file_path = target_path.with_extension("lock");
         
         // create_new(true) は、ファイルが既に存在する場合はエラーとなるためアトミックな作成が可能
@@ -15,7 +15,7 @@ impl FileLocker {
             .create_new(true)
             .open(&lock_file_path)
         {
-            Ok(_) => Some(Self { lock_file_path }),
+            Ok(_) => Some(FileLocker { lock_file_path }),
             Err(_) => None,
         }
     }

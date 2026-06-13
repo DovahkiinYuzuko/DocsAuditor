@@ -646,6 +646,15 @@ fn walk_node_for_identifiers(node: tree_sitter::Node, source: &str, used_set: &m
             if let Ok(text) = node.utf8_text(source.as_bytes()) {
                 let t = text.trim().to_string();
                 if !t.is_empty() {
+                    if t.contains("::") {
+                        for part in t.split("::") {
+                            used_set.insert(part.trim().to_string());
+                        }
+                    } else if t.contains('.') {
+                        for part in t.split('.') {
+                            used_set.insert(part.trim().to_string());
+                        }
+                    }
                     used_set.insert(t);
                 }
             }
