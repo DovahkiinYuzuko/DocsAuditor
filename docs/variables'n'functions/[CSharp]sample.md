@@ -4,5 +4,5 @@
 手動検証用のC#サンプル仕様書。
 
 ## 監査対象シンボル
-- fn Process_wrong(input: string, factor: int) -> int (L4-6)
-- let DefaultScore: string (L3)
+- fn Process(input: string, factor: int) -> int (L3-5)
+- let DefaultScore: int (L2)
