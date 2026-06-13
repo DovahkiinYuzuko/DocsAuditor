@@ -29,7 +29,7 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
   - ワークスペースが存在しない、またはバイナリが見つからない場合のみ、拡張機能インストール先内の `server/target/debug/server.exe` または `release/server.exe` を使用する。
   - サーバーの起動オプション（ServerOptions）およびクライアントオプション（LanguageClientOptions）を設定する。
   - `LanguageClientOptions` にて以下を設定：
-    - `documentSelector` に Markdown、Rust、TypeScript、JavaScript、Python、Go、C、C++、C#、Ruby、Swift、Kotlin を指定し、これらのファイルの変更を監視対象とする。
+    - `documentSelector` に Markdown、Rust、TypeScript、JavaScript、Python、Go、C、C++、C#、Ruby、Swift、Kotlin、Java を指定し、これらのファイルの変更を監視対象とする。
     - `outputChannel` に作成した出力チャネルを登録。
     - `initializationOptions` に `{ locale: vscode.env.language }` を指定し、エディタの表示言語設定をLSPサーバーに引き渡す。
     - `initializationFailedHandler` を設定し、LSPサーバーの起動や初期化が失敗した際にエラーを出力チャネルへ出力し、拡張機能ホストをクラッシュさせずに安全に終了（`false` を返却）させる。

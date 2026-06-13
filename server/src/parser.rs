@@ -32,6 +32,7 @@ pub fn parse_code(code: &str, lang: &str) -> Vec<SymbolInfo> {
         "ruby" => parse_ruby_code(code),
         "swift" => parse_swift_code(code),
         "kotlin" => parse_kotlin_code(code),
+        "java" => parse_java_code(code),
         _ => Vec::new(),
     }
 }
@@ -1584,6 +1585,135 @@ fn extract_kotlin_variable_info(node: Node, source: &str, symbols: &mut Vec<Symb
     }
 }
 
+pub fn parse_java_code(code: &str) -> Vec<SymbolInfo> {
+    let mut parser = TsParser::new();
+    parser.set_language(tree_sitter_java::language()).expect("Failed to load Java language");
+    let tree = parser.parse(code, None).expect("Failed to parse Java code");
+    let mut symbols = Vec::new();
+    walk_java_node(tree.root_node(), code, &mut symbols);
+    symbols
+}
+
+fn walk_java_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let kind = node.kind();
+    if kind == "method_declaration" {
+        if let Some(sym) = extract_java_function_info(node, source) {
+            symbols.push(sym);
+        }
+    } else if kind == "field_declaration" || kind == "local_variable_declaration" {
+        extract_java_variable_info(node, source, symbols);
+    }
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            walk_java_node(cursor.node(), source, symbols);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+fn extract_java_function_info(node: Node, source: &str) -> Option<SymbolInfo> {
+    let name_node = node.child_by_field_name("name")?;
+    let name = name_node.utf8_text(source.as_bytes()).ok()?.trim().to_string();
+    
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+    
+    let return_type = node.child_by_field_name("dimensions")
+        .or_else(|| node.child_by_field_name("type"))
+        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+        .map(|t| t.trim().to_string());
+        
+    let mut params = Vec::new();
+    if let Some(params_node) = node.child_by_field_name("parameters") {
+        let mut cursor = params_node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                if child.kind() == "formal_parameter" {
+                    let type_str = child.child_by_field_name("type")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_else(|| "any".to_string());
+                    
+                    let param_name = child.child_by_field_name("name")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_else(|| "".to_string());
+                        
+                    if !param_name.is_empty() {
+                        params.push((param_name, type_str));
+                    }
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut used_set = std::collections::HashSet::new();
+    collect_used_symbols(node, source, &mut used_set);
+    used_set.remove(&name);
+    let used_symbols = Some(used_set.into_iter().collect());
+
+    Some(SymbolInfo {
+        name,
+        kind: SymbolKind::Function,
+        params: Some(params),
+        return_type,
+        var_type: None,
+        line_range: Some((start_line, end_line)),
+        spec_line: None,
+        dependencies: None,
+        used_symbols,
+    })
+}
+
+fn extract_java_variable_info(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
+    let type_str = node.child_by_field_name("type")
+        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+        .map(|t| t.trim().to_string());
+        
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            let child = cursor.node();
+            if child.kind() == "variable_declarator" {
+                if let Some(name_node) = child.child_by_field_name("name") {
+                    if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
+                        let name_str = name.trim().to_string();
+                        let mut used_set = std::collections::HashSet::new();
+                        collect_used_symbols(child, source, &mut used_set);
+                        used_set.remove(&name_str);
+                        
+                        symbols.push(SymbolInfo {
+                            name: name_str,
+                            kind: SymbolKind::Variable,
+                            params: None,
+                            return_type: None,
+                            var_type: type_str.clone(),
+                            line_range: Some((start_line, end_line)),
+                            spec_line: None,
+                            dependencies: None,
+                            used_symbols: Some(used_set.into_iter().collect()),
+                        });
+                    }
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1863,5 +1993,33 @@ fun updateStatus(status: String, code: Int): Boolean {
         let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
         assert_eq!(var.name, "appName");
         assert_eq!(var.var_type, Some("String".to_string()));
+    }
+
+    #[test]
+    fn test_parse_java_code() {
+        let code = r#"
+class Main {
+    public static int baseScore = 90;
+    public boolean processRequest(String user, int score) {
+        return score >= baseScore;
+    }
+}
+        "#;
+        let mut parser = TsParser::new();
+        parser.set_language(tree_sitter_java::language()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        println!("JAVA AST: {}", tree.root_node().to_sexp());
+
+        let symbols = parse_java_code(code);
+        assert_eq!(symbols.len(), 2);
+
+        let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
+        assert_eq!(func.name, "processRequest");
+        assert_eq!(func.params, Some(vec![("user".to_string(), "String".to_string()), ("score".to_string(), "int".to_string())]));
+        assert_eq!(func.return_type, Some("boolean".to_string()));
+
+        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
+        assert_eq!(var.name, "baseScore");
+        assert_eq!(var.var_type, Some("int".to_string()));
     }
 }

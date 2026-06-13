@@ -94,7 +94,8 @@ export function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'csharp' },
             { scheme: 'file', language: 'ruby' },
             { scheme: 'file', language: 'swift' },
-            { scheme: 'file', language: 'kotlin' }
+            { scheme: 'file', language: 'kotlin' },
+            { scheme: 'file', language: 'java' }
         ],
         outputChannel: outputChannel,
         initializationOptions: {

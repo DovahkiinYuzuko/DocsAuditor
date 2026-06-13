@@ -206,6 +206,7 @@ impl Backend {
                             "ruby" => "rb",
                             "swift" => "swift",
                             "kotlin" => "kt",
+                            "java" => "java",
                             _ => "",
                         };
 
@@ -237,6 +238,7 @@ impl Backend {
                     "rb" => "ruby".to_string(),
                     "swift" => "swift".to_string(),
                     "kt" | "kts" => "kotlin".to_string(),
+                    "java" => "java".to_string(),
                     _ => "".to_string(),
                 };
                 let lang_prefix = match extension {
@@ -251,6 +253,7 @@ impl Backend {
                     "rb" => "Ruby",
                     "swift" => "Swift",
                     "kt" | "kts" => "Kotlin",
+                    "java" => "Java",
                     _ => "",
                 };
 
@@ -605,7 +608,7 @@ async fn collect_used_symbols_in_dir_recursive(dir: &Path, used_set: &mut std::c
             if extension == "rs" || extension == "ts" || extension == "js" || extension == "py" || extension == "go"
                 || extension == "c" || extension == "h" || extension == "cpp" || extension == "hpp"
                 || extension == "cc" || extension == "cxx" || extension == "cs" || extension == "rb"
-                || extension == "swift" || extension == "kt" || extension == "kts"
+                || extension == "swift" || extension == "kt" || extension == "kts" || extension == "java"
             {
                 if let Ok(content) = tokio::fs::read_to_string(&path).await {
                     if extension == "rs" {
