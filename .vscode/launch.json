@@ -9,7 +9,7 @@
       "args": [
         "--profile-temp",
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "c:/Users/rikui/Documents/VSCode/DocsAudit"
+        "${workspaceFolder}"
       ],
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
