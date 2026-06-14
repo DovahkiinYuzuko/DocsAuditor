@@ -14,7 +14,10 @@ AIエージェントがDocs Auditorを使用するプロジェクトで動作す
 - SVGバッジ（MIT License, Languages, Protocol/Compatibility）
 - 日本語セクション / Englishセクション：
   - **概要**：LSPによる自動整合性監査の解説。
-  - **動作環境**：VSIX互換IDE（VSCode, Antigravityなど）での動作、Rustバイナリ同梱。
+  - **動作環境**：
+    - VSCodeおよびAntigravity IDEでの動作確認済み。
+    - Windows 11環境で検証済み。macOS/Linux環境でも動作可能と想定されますが、現時点で検証は未実施である旨を明記。
+    - Rust製LSPサーバーバイナリ同梱。
   - **対応プログラミング言語**：Rust, TS/JS, Python, Go, C/C++, C#, Ruby, Swift, Kotlin, Java。
   - **主な機能**：
     - ASTベースのリアルタイム構造解析（Tree-sitter）
