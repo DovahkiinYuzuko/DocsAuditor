@@ -17,7 +17,7 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
 
 ## 関数定義
 
-### `activate` (L28-125)
+### `activate` (L28-129)
 - **引数**:
   - `context: vscode.ExtensionContext` - 拡張機能のコンテキストオブジェクト。
 - **戻り値**: `void`
@@ -25,8 +25,9 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
   - 拡張機能がアクティブ化された際にVS Codeより呼び出される。
   - `"Docs Auditor"` という名前の出力チャネルを作成する。
   - RustでビルドされたLSPサーバーバイナリのパスを特定する。
-  - 開発の利便性を高めるため、ワークスペースフォルダ（`vscode.workspace.workspaceFolders`）が存在する場合は、ワークスペース配下の `server/target/debug/server.exe` または `server/target/release/server.exe` を優先してロードする。
-  - ワークスペースが存在しない、またはバイナリが見つからない場合のみ、拡張機能インストール先内の `server/target/debug/server.exe` または `release/server.exe` を使用する。
+  - セキュリティ向上（Workspace Trust バイパスによるRCEの防止）のため、拡張機能が開発デバッグモード（`vscode.ExtensionMode.Development`）のときのみ、ワークスペースフォルダ内の `server/target/debug/server.exe` または `release/server.exe` を探索してロードします。
+  - 通常の配布実行モードでは、ワークスペース内のバイナリは無視し、拡張機能のインストールフォルダ内の `server/target/release/server`（Windowsの場合は `.exe`）を最優先でロードし、存在しない場合のみ `debug` バイナリへフォールバックします。
+  - 特定したサーバーバイナリが存在しない場合、エラーを警告表示した上で安全に `activate` 処理を終了（LSPの起動処理を抑止）します。
   - サーバーの起動オプション（ServerOptions）およびクライアントオプション（LanguageClientOptions）を設定する。
   - `LanguageClientOptions` にて以下を設定：
     - `documentSelector` に Markdown、Rust、TypeScript、JavaScript、Python、Go、C、C++、C#、Ruby、Swift、Kotlin、Java を指定し、これらのファイルの変更を監視対象とする。
@@ -36,7 +37,7 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
   - `LanguageClient` インスタンスを生成して起動する。
   - `docsAuditor.autoInjection` 設定変更の監視登録を行う。
   
-### `deactivate` (L127-133)
+### `deactivate` (L131-137)
 - **引数**: なし
 - **戻り値**: `Thenable<void> | undefined`
 - **説明**:

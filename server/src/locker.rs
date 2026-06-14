@@ -1,5 +1,6 @@
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 pub struct FileLocker {
     lock_file_path: PathBuf,
@@ -8,6 +9,20 @@ pub struct FileLocker {
 impl FileLocker {
     pub fn try_lock(target_path: &Path) -> Option<FileLocker> {
         let lock_file_path = target_path.with_extension("lock");
+        
+        // プロセス異常終了等によるデッドロック（stale lock）を防ぐため、
+        // 既存のロックファイルが存在し、最終更新から10秒以上経過している場合は自動解放（削除）する
+        if lock_file_path.exists() {
+            if let Ok(metadata) = std::fs::metadata(&lock_file_path) {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(elapsed) = SystemTime::now().duration_since(modified) {
+                        if elapsed.as_secs() > 10 {
+                            let _ = std::fs::remove_file(&lock_file_path);
+                        }
+                    }
+                }
+            }
+        }
         
         // create_new(true) は、ファイルが既に存在する場合はエラーとなるためアトミックな作成が可能
         match OpenOptions::new()

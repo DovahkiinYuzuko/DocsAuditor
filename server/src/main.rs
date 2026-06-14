@@ -23,6 +23,7 @@ struct Backend {
     root_path: Arc<Mutex<Option<PathBuf>>>,
     locale: Arc<Mutex<String>>,
     issues_cache: Arc<Mutex<std::collections::HashMap<Url, Vec<AuditIssue>>>>,
+    project_used_symbols: Arc<Mutex<Option<std::collections::HashSet<String>>>>,
 }
 
 #[tower_lsp::async_trait]
@@ -78,22 +79,22 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.on_change(params.text_document.uri, params.text_document.text).await;
+        self.on_change(params.text_document.uri, params.text_document.text, true).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         if let Some(change) = params.content_changes.first() {
-            self.on_change(params.text_document.uri, change.text.clone()).await;
+            self.on_change(params.text_document.uri, change.text.clone(), false).await;
         }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         if let Some(text) = params.text {
-            self.on_change(params.text_document.uri, text).await;
+            self.on_change(params.text_document.uri, text, true).await;
         } else {
             if let Ok(path) = params.text_document.uri.to_file_path() {
                 if let Ok(text) = tokio::fs::read_to_string(&path).await {
-                    self.on_change(params.text_document.uri, text).await;
+                    self.on_change(params.text_document.uri, text, true).await;
                 }
             }
         }
@@ -108,47 +109,59 @@ impl LanguageServer for Backend {
                 if let Ok(issue) = serde_json::from_value::<AuditIssue>(data.clone()) {
                     if issue.issue_type == AuditIssueType::LineNumberMissing || issue.issue_type == AuditIssueType::LineNumberMismatch {
                         if let Some(code_range) = issue.code_line_range {
-                            let new_text = format!(" (L{}-{})", code_range.0, code_range.1);
-                            
-                            let edit = TextEdit {
-                                range: Range {
-                                    start: Position {
-                                        line: diagnostic.range.end.line,
-                                        character: diagnostic.range.end.character,
-                                    },
-                                    end: Position {
-                                        line: diagnostic.range.end.line,
-                                        character: diagnostic.range.end.character,
-                                    },
-                                },
-                                new_text,
-                            };
+                            let mut text_edit = None;
+                            if let Ok(path) = uri.to_file_path() {
+                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                    let line_num = diagnostic.range.start.line as usize;
+                                    if let Some(line_content) = content.lines().nth(line_num) {
+                                        let line_regex = regex::Regex::new(r"\s*\(L\d+(?:-\d+)?\)\s*$").unwrap();
+                                        let clean_line = line_regex.replace(line_content, "").trim_end().to_string();
+                                        let new_line_content = format!("{} (L{}-{})", clean_line, code_range.0, code_range.1);
 
-                            let mut changes = std::collections::HashMap::new();
-                            changes.insert(uri.clone(), vec![edit]);
+                                        text_edit = Some(TextEdit {
+                                            range: Range {
+                                                start: Position {
+                                                    line: line_num as u32,
+                                                    character: 0,
+                                                },
+                                                end: Position {
+                                                    line: line_num as u32,
+                                                    character: line_content.len() as u32,
+                                                },
+                                            },
+                                            new_text: new_line_content,
+                                        });
+                                    }
+                                }
+                            }
 
-                            let locale = self.locale.lock().await;
-                            let title = get_message(
-                                &MessageKey::CodeActionTitle(format!("L{}-{}", code_range.0, code_range.1)),
-                                &locale,
-                            );
+                            if let Some(edit) = text_edit {
+                                let mut changes = std::collections::HashMap::new();
+                                changes.insert(uri.clone(), vec![edit]);
 
-                            let action = CodeAction {
-                                title,
-                                kind: Some(CodeActionKind::QUICKFIX),
-                                diagnostics: Some(vec![diagnostic.clone()]),
-                                edit: Some(WorkspaceEdit {
-                                    changes: Some(changes),
-                                    document_changes: None,
-                                    change_annotations: None,
-                                }),
-                                is_preferred: Some(true),
-                                disabled: None,
-                                data: None,
-                                command: None,
-                            };
+                                let locale = self.locale.lock().await;
+                                let title = get_message(
+                                    &MessageKey::CodeActionTitle(format!("L{}-{}", code_range.0, code_range.1)),
+                                    &locale,
+                                );
 
-                            actions.push(CodeActionOrCommand::CodeAction(action));
+                                let action = CodeAction {
+                                    title,
+                                    kind: Some(CodeActionKind::QUICKFIX),
+                                    diagnostics: Some(vec![diagnostic.clone()]),
+                                    edit: Some(WorkspaceEdit {
+                                        changes: Some(changes),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    }),
+                                    is_preferred: Some(true),
+                                    disabled: None,
+                                    data: None,
+                                    command: None,
+                                };
+
+                                actions.push(CodeActionOrCommand::CodeAction(action));
+                            }
                         }
                     }
                 }
@@ -160,7 +173,7 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
-    async fn on_change(&self, uri: Url, text: String) {
+    async fn on_change(&self, uri: Url, text: String, force_update_cache: bool) {
         let _: &tokio::sync::Mutex<crate::state::hfsm::Hfsm> = &self.state;
         {
             self.state.lock().await.dispatch(Event::DocumentChanged);
@@ -199,30 +212,34 @@ impl Backend {
                     if let Some(end_bracket) = file_name.find(']') {
                         let lang = &file_name[1..end_bracket];
                         target_lang = lang.to_lowercase();
-                        let name_without_lang = &file_name[end_bracket + 1..file_name.len() - 3];
                         
-                        let extension = match target_lang.as_str() {
-                            "rust" => "rs",
-                            "typescript" => "ts",
-                            "javascript" => "js",
-                            "python" => "py",
-                            "go" => "go",
-                            "c" => "c",
-                            "cpp" => "cpp",
-                            "csharp" => "cs",
-                            "ruby" => "rb",
-                            "swift" => "swift",
-                            "kotlin" => "kt",
-                            "java" => "java",
-                            _ => "",
-                        };
+                        // DoS 対策: 長さと拡張子を確認した上で安全にスライス
+                        if file_name.ends_with(".md") && file_name.len() >= end_bracket + 4 {
+                            let name_without_lang = &file_name[end_bracket + 1..file_name.len() - 3];
+                            
+                            let extension = match target_lang.as_str() {
+                                "rust" => "rs",
+                                "typescript" => "ts",
+                                "javascript" => "js",
+                                "python" => "py",
+                                "go" => "go",
+                                "c" => "c",
+                                "cpp" => "cpp",
+                                "csharp" => "cs",
+                                "ruby" => "rb",
+                                "swift" => "swift",
+                                "kotlin" => "kt",
+                                "java" => "java",
+                                _ => "",
+                            };
 
-                        if !extension.is_empty() {
-                            let target_filename = format!("{}.{}", name_without_lang, extension);
-                            if let Some(found_code_path) = find_file_in_dir(&root_path, &target_filename).await {
-                                if let Ok(content) = tokio::fs::read_to_string(&found_code_path).await {
-                                    code_text = content;
-                                    matched = true;
+                            if !extension.is_empty() {
+                                let target_filename = format!("{}.{}", name_without_lang, extension);
+                                if let Some(found_code_path) = find_file_in_dir(&root_path, &target_filename).await {
+                                    if let Ok(content) = tokio::fs::read_to_string(&found_code_path).await {
+                                        code_text = content;
+                                        matched = true;
+                                    }
                                 }
                             }
                         }
@@ -290,7 +307,18 @@ impl Backend {
 
         let spec_symbols = parser::parse_markdown_spec(&spec_text);
         let code_symbols = parser::parse_code(&code_text, &target_lang);
-        let project_used = collect_project_used_symbols(&root_path).await;
+        
+        // パフォーマンス最適化: キャッシュを使用してDidChange時の全体スキャンを削減
+        let project_used = {
+            let mut cache = self.project_used_symbols.lock().await;
+            if force_update_cache || cache.is_none() {
+                let symbols = collect_project_used_symbols(&root_path).await;
+                *cache = Some(symbols.clone());
+                symbols
+            } else {
+                cache.as_ref().unwrap().clone()
+            }
+        };
         let spec_path_opt = spec_uri.to_file_path().ok();
 
         let locale = self.locale.lock().await;
@@ -484,8 +512,8 @@ impl Backend {
                 report_content.push_str(&format!(
                     "- [ ] **{}** (シンボル: `{}`)\n  - **内容**: {}\n  - **仕様書箇所**: [{}](file:///{}) L{}\n",
                     issue_type_str,
-                    issue.name,
-                    issue.message,
+                    escape_markdown(&issue.name),
+                    escape_markdown(&issue.message),
                     spec_relative,
                     spec_path_buf.to_string_lossy().replace('\\', "/"),
                     issue.spec_line
@@ -836,8 +864,8 @@ impl Backend {
                 report_content.push_str(&format!(
                     "- [ ] **{}** (シンボル: `{}`)\n  - **内容**: {}\n  - **仕様書箇所**: [{}](file:///{}) L{}\n",
                     issue_type_str,
-                    issue.name,
-                    issue.message,
+                    escape_markdown(&issue.name),
+                    escape_markdown(&issue.message),
                     spec_relative,
                     spec_path_buf.to_string_lossy().replace('\\', "/"),
                     issue.spec_line
@@ -975,6 +1003,17 @@ fn walk_node_for_identifiers(node: tree_sitter::Node, source: &str, used_set: &m
     }
 }
 
+fn escape_markdown(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('*', "\\*")
+        .replace('_', "\\_")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace('<', "\\<")
+        .replace('>', "\\>")
+}
+
 #[tokio::main]
 async fn main() {
     std::panic::set_hook(Box::new(|info| {
@@ -991,6 +1030,7 @@ async fn main() {
         root_path: Arc::new(Mutex::new(None)),
         locale: Arc::new(Mutex::new("en".to_string())),
         issues_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        project_used_symbols: Arc::new(Mutex::new(None)),
     });
 
     Server::new(stdin, stdout, messages).serve(service).await;

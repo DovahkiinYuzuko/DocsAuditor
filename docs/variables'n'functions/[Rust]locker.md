@@ -13,14 +13,15 @@
 
 ## 関数・メソッド定義
 
-### `try_lock` (L9-21)
+### `try_lock` (L10-36)
 - **引数**:
   - `target_path: &std::path::Path` - ロックしたい対象ファイルのパス。
 - **戻り値**: `Option<FileLocker>`
 - **説明**:
-  - 対象ファイルに対応するロックファイル（例: `target_path.with_extension("lock")`）のアトミックな新規作成を試みる。
-  - `std::fs::OpenOptions::new().write(true).create_new(true).open(...)` を使用して、ファイルが既に存在しない場合のみ新規作成する。
-  - 作成に成功した場合は `Some(FileLocker)` を返し、既に存在して失敗した場合は `None` を返す。
+  - 対象ファイルに対応するロックファイル（例: `target_path.with_extension("lock")`）の新規作成によるスピンロックを試みる。
+  - プロセス異常終了等によるデッドロック（stale lock）を防ぐため、既存のロックファイルが存在し、かつ最終更新日時（mtime）から **10秒以上** が経過している場合は、ロックファイルを自動削除して強制解放を試みます。
+  - その後、`std::fs::OpenOptions::new().write(true).create_new(true).open(...)` を使用して、アトミックにロック用ファイルを新規作成します。
+  - 作成に成功した場合は `Some(FileLocker)` を返し、競合して失敗した場合は `None` を返します。
 
 ### `FileLocker` の `Drop` トレイト実装
 - **説明**:

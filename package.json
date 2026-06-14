@@ -1,7 +1,7 @@
 {
   "name": "docs-auditor",
-  "displayName": "Docs Auditor",
-  "description": "LSP-based specification and code consistency auditor",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
   "version": "0.1.0",
   "publisher": "YuzukoUnderson",
   "engines": {
@@ -17,12 +17,12 @@
   "contributes": {
     "configuration": {
       "type": "object",
-      "title": "Docs Auditor Configuration",
+      "title": "%config.title%",
       "properties": {
         "docsAuditor.autoInjection": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically inject line numbers into specification documents when verified."
+          "description": "%config.autoInjection.description%"
         }
       }
     }

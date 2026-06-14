@@ -34,20 +34,20 @@ export function activate(context: vscode.ExtensionContext) {
     
     let serverPath = '';
 
-    // ワークスペースフォルダが存在する場合、ワークスペース内のビルド成果物を優先（開発・デバッグ用）
-    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+    // 開発・デバッグ用：開発デバッグモードの時のみワークスペース内のビルド成果物を優先
+    if (context.extensionMode === vscode.ExtensionMode.Development && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
         const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
         const workspaceDebugPath = path.join(workspaceRoot, 'server', 'target', 'debug', serverExe);
         const workspaceReleasePath = path.join(workspaceRoot, 'server', 'target', 'release', serverExe);
 
-        if (fs.existsSync(workspaceDebugPath)) {
-            serverPath = workspaceDebugPath;
-        } else if (fs.existsSync(workspaceReleasePath)) {
+        if (fs.existsSync(workspaceReleasePath)) {
             serverPath = workspaceReleasePath;
+        } else if (fs.existsSync(workspaceDebugPath)) {
+            serverPath = workspaceDebugPath;
         }
     }
 
-    // ワークスペース内で見つからない場合は、インストール先フォルダから取得（配布用）
+    // 配布用：インストール先フォルダから取得（release優先）
     if (!serverPath) {
         const debugServerPath = context.asAbsolutePath(
             path.join('server', 'target', 'debug', serverExe)
@@ -56,19 +56,23 @@ export function activate(context: vscode.ExtensionContext) {
             path.join('server', 'target', 'release', serverExe)
         );
 
-        serverPath = debugServerPath;
-        if (!fs.existsSync(serverPath) && fs.existsSync(releaseServerPath)) {
+        if (fs.existsSync(releaseServerPath)) {
             serverPath = releaseServerPath;
+        } else if (fs.existsSync(debugServerPath)) {
+            serverPath = debugServerPath;
+        } else {
+            serverPath = releaseServerPath; // デフォルトフォールバック
         }
     }
 
     logInfo(`[Docs Auditor] LSP サーバーパスを決定しました: ${serverPath}`);
 
-    // サーバーバイナリが存在しない場合は警告を表示
+    // サーバーバイナリが存在しない場合は警告を表示して起動を中止
     if (!fs.existsSync(serverPath)) {
-        const errorMsg = `Docs Auditor LSP サーバーバイナリが見つかりません。Rustコードをビルドしてください: ${serverPath}`;
+        const errorMsg = `Docs Auditor LSP サーバーバイナリが見つかりません。起動を中止します。インストール状態を確認してください: ${serverPath}`;
         logError(errorMsg);
         vscode.window.showWarningMessage(errorMsg);
+        return; // 起動を中止
     }
 
     const run: ServerOptions = {

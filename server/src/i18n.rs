@@ -97,3 +97,40 @@ pub fn get_message(key: &MessageKey, locale: &str) -> String {
     let args_ref: Vec<&str> = args_vec.iter().map(|s| s.as_str()).collect();
     format_msg(&template, &args_ref)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_locales_keys_are_consistent() {
+        let locales = load_locales();
+        let en_map = locales.get("en").expect("en.json must exist");
+        
+        for (lang, lang_map) in &locales {
+            if lang == "en" {
+                continue;
+            }
+            
+            // Check for missing keys in this language compared to en
+            for key in en_map.keys() {
+                assert!(
+                    lang_map.contains_key(key),
+                    "Locale '{}' is missing key '{}' defined in en.json",
+                    lang,
+                    key
+                );
+            }
+            
+            // Check for extra keys in this language that are not in en
+            for key in lang_map.keys() {
+                assert!(
+                    en_map.contains_key(key),
+                    "Locale '{}' has extra key '{}' not defined in en.json",
+                    lang,
+                    key
+                );
+            }
+        }
+    }
+}
