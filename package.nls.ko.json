@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "LSP 기반 명세서 및 코드 일관성 감사 도구",
+  "config.title": "Docs Auditor 설정",
+  "config.autoInjection.description": "검증 시 명세서 문서에 라인 번호를 자동으로 추가합니다."
+}

@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "LSP-põhine spetsifikatsiooni ja koodi kooskõla audiitor",
+  "config.title": "Docs Auditor Seadistus",
+  "config.autoInjection.description": "Lisab kontrollimisel spetsifikatsioonidokumentidesse automaatselt reanumbrid."
+}

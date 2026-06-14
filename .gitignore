@@ -9,6 +9,8 @@
 !README.md
 !LICENSE
 !NOTICE.md
+!package.nls.json
+!package.nls.*.json
 
 # VS Code 設定
 !.vscode/

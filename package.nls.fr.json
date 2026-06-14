@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "Auditeur de cohérence du code et des spécifications basé sur LSP",
+  "config.title": "Configuration de Docs Auditor",
+  "config.autoInjection.description": "Injecte automatiquement les numéros de ligne dans les documents de spécification après vérification."
+}

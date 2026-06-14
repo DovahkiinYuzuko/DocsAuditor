@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "LSP仕様に基づく仕様書とコードの整合性監査ツール",
+  "config.title": "Docs Auditor 設定",
+  "config.autoInjection.description": "検証時、仕様書ドキュメントに行番号を自動で挿入します。"
+}

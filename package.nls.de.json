@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "LSP-basierter Spezifikations- und Code-Konsistenzauditor",
+  "config.title": "Docs Auditor Konfiguration",
+  "config.autoInjection.description": "Fügt Zeilennummern bei Überprüfung automatisch in Spezifikationsdokumente ein."
+}

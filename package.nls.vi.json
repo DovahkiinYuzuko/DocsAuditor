@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "Trình kiểm toán tính nhất quán của đặc tả và mã nguồn dựa trên LSP",
+  "config.title": "Cấu hình Docs Auditor",
+  "config.autoInjection.description": "Tự động chèn số dòng vào tài liệu đặc tả sau khi xác minh."
+}

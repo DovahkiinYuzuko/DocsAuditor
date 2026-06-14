@@ -1,0 +1,6 @@
+{
+  "extension.displayName": "Docs Auditor",
+  "extension.description": "基于 LSP 的规范与代码一致性审计工具",
+  "config.title": "Docs Auditor 配置",
+  "config.autoInjection.description": "验证时自动在规范文档中插入行号。"
+}
