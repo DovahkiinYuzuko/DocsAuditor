@@ -66,12 +66,16 @@
 
   ### 概要
   Docs Auditor は、AIエージェントや開発者が作成する「仕様書（Markdown）」と「実際のソースコード」間の整合性を、AST（抽象構文木）を用いて自動かつ厳密に監査するLSPベースのエディタ拡張機能です。
-  ドキュメントの陳腐化を防ぎ、常に設計書とソースコードが完全に同期された状態を保つことができます。
+  ドキュメントの陳腐化を防ぎ、常に設計書とソースコードが完全に同期された状態を保ちます。
+
+  ### 開発目的（なぜ仕様書を作成させるのか）
+  AIエージェントによる開発において、セッションが切り替わったり、別のAIモデルにタスクが引き継がれたりした場合でも、プロジェクト内の変数や関数の定義・位置を「マップのピン」のように視覚化して、コードベースの構造を素早く把握・理解できるようにすることが目的です。
+  Docs Auditor は、AIエージェントが作成した仕様書とコードの乖離を自動でチェックし、記述の正確性を担保する役割を果たします。
 
   ### 動作環境・前提条件
   - **対応IDE**: VSCode および Antigravity IDE（VSIX拡張機能をサポートするIDE）で動作確認済みです。
   - **対応OS**: Windows 11 環境で動作検証済みです。macOS および Linux 環境でも動作する見込み（LSPはクロスプラットフォーム仕様）ですが、現時点では実機での検証は未実施です。
-  - **同梱物**: 拡張機能内に Rust 製のLSPサーバーバイナリ（Windows用の `server.exe` または Unix用の `server`）が同梱されて自動起動します。
+  - **バイナリ同梱**: GitHub Actionsによるワークフローにより、リリース時に各OS用のサーバーバイナリ（Windows用の `server.exe` または Unix用の `server`）が自動ビルドされ、拡張機能パッケージに同梱されて自動起動します。
 
   ### サポートプログラミング言語
   以下の 11 言語のソースコードをパースし、仕様書との整合性を監査できます：
@@ -99,25 +103,21 @@
      ```
 
   ### 主な機能
-  - **ASTベースのリアルタイム構造解析**：単なる文字列マッチングではなく、`tree-sitter` を用いてコードをパースし、変数/関数の構造を厳密にチェックします。
-  - **双方向整合性監査**：仕様書とコードの間でシンボルの存在、変数/関数の種別、引数の数と型、戻り値の型をチェック。
+  - **ASTベースのリアルタイム構造解析**：`tree-sitter` を用いてコードをパースし、変数/関数の構造を厳密にチェックします。
+  - **双方向整合性監査**：仕様書とコードの間でシンボルの存在、変数/関数の種別、引数の数と型、戻り値の型をチェックします。
   - **行番号の自動同期（インジェクション）**：一致が確認されたシンボルに対し、仕様書の見出しにコードの正確な行番号を追記・更新します。エディタのクイックフィックス（💡）から手動で適用できるほか、設定で完全自動化も可能です（書き込み無限ループを防止するファイルロック機構を内蔵）。
   - **デッドコード（未使用仕様）検出**：仕様書に書かれているが、プロジェクト全体で一度も参照されていないシンボルを検知して警告します。
   - **監査レポート（TODO）の自動生成と削除**：整合性エラーを検出すると、プロジェクトルートに `variables_functions_audit_report.md` を自動生成します。すべてのエラーが解決されると、レポートファイルは自動で削除（クリーンアップ）されます。
 
   ### AIエージェントとの協調開発（AI連携）
-  本ツールは、AIエージェント（Claude Code、Cursor、Gemini CLIなど）との共同開発を劇的に効率化します。
+  本ツールは、AIエージェント（Claude Code、Cursor、Antigravity CLIなど）との共同開発プロセスを支援します。
   同梱されている `AGENTS.md` は、AIエージェントに読み込ませるためのシステムプロンプト（開発ルール）です。
-  AIと協調開発を行う際は、`AGENTS.md` の中身をプロジェクトのルール設定ファイル（`CLAUDE.md` や `.cursorrules` など）にコピーして使用してください。これにより、AIが自律的に仕様書を更新し、Docs Auditor の監査結果に基づいてバグを修正するようになります。
+  AIと協調開発を行う際は、`AGENTS.md` の中身をプロジェクトのルール設定ファイル（`CLAUDE.md` や `.cursorrules` など）にコピーして使用してください。Docs Auditor の監査結果に基づいてAIが自律的に整合性を維持するように動作します。
 
   ### インストール方法
   #### VSIXからインストールする（通常）
-  1. 生成された `docs-auditor-0.1.0.vsix` ファイルを用意します。
+  1. リリースから `docs-auditor-0.1.0.vsix` ファイルをダウンロードします。
   2. VSCode または Antigravity IDE を開き、「拡張機能」タブから「...（メニュー）」->「VSIXからのインストール...」を選択してファイルを選択します。
-  3. または、ターミナルから以下のコマンドを実行してインストールします：
-     ```powershell
-     code --install-extension docs-auditor-0.1.0.vsix
-     ```
 
   #### ソースコードからビルドする（開発者向け）
   1. 本リポジトリをクローンします。
@@ -130,7 +130,7 @@
      npm install; npm run compile
      npx @vscode/vsce package
      ```
-     これにより、プロジェクトルートに最新 of `docs-auditor-0.1.0.vsix` が生成されます。
+     これにより、プロジェクトルートに最新の `docs-auditor-0.1.0.vsix` が生成されます。
 
   ### 設定項目
   - **`docsAuditor.autoInjection` (boolean)**:
@@ -153,10 +153,13 @@
   ### Introduction
   Docs Auditor is an LSP-based editor extension that automatically and rigorously audits the consistency between markdown specification files and the source code using Abstract Syntax Trees (AST). It prevents specification rot, ensuring that design docs and code are always fully synchronized.
 
+  ### Development Goal (Why generate specifications?)
+  In development driven by AI agents, this system aims to visualize variables and functions as "map pins" indicating their definition and locations, enabling agents to quickly understand the codebase even when sessions change or tasks are handed over to different AI models. Docs Auditor automatically checks for discrepancies between the code and these specifications, ensuring description accuracy.
+
   ### Operating Environment & Prerequisites
-  - **Compatible IDEs**: Verified to work on VSCode and Antigravity IDE (and other IDEs that support VSIX extensions).
+  - **Compatible IDEs**: Verified to work on VSCode and Antigravity IDE.
   - **Compatible OS**: Verified on Windows 11. Although anticipated to work on macOS and Linux (due to LSP cross-platform capability), OS-specific verification has not been conducted yet.
-  - **Bundled Server**: A Rust-based LSP server binary (`server.exe` for Windows or `server` for Unix) is bundled and runs automatically.
+  - **Binary Bundling**: A GitHub Actions workflow automatically builds the server binary (`server.exe` for Windows or `server` for Unix) on release, bundling it into the extension package.
 
   ### Supported Programming Languages
   The following 11 languages are supported:
@@ -191,18 +194,14 @@
   - **Automated Report Generation & Cleanup**: Generates a `variables_functions_audit_report.md` TODO report in the project root if inconsistencies are found. Cleans up (deletes) the report automatically once all issues are fixed.
 
   ### AI Co-development
-  This extension is designed to work in synergy with AI coding agents (such as Claude Code, Cursor, or Gemini CLI).
+  This extension is designed to support the collaborative development process with AI coding agents (such as Claude Code, Cursor, or Antigravity CLI).
   The included `AGENTS.md` contains the system prompt rules.
   When co-developing with an AI agent, copy the contents of `AGENTS.md` into your agent configuration files (like `CLAUDE.md` or `.cursorrules`). This will prompt the AI to autonomously keep specification documents updated and correct bugs based on Docs Auditor feedback.
 
   ### Installation
   #### Installing from VSIX (Standard)
-  1. Obtain the packaged `docs-auditor-0.1.0.vsix` file.
+  1. Download the `docs-auditor-0.1.0.vsix` file from the releases page.
   2. Open VSCode or Antigravity IDE, navigate to the Extensions tab, click the "..." menu, and select "Install from VSIX...".
-  3. Or run the following command in your terminal:
-     ```powershell
-     code --install-extension docs-auditor-0.1.0.vsix
-     ```
 
   #### Building from Source (Developers)
   1. Clone this repository.
