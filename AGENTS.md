@@ -1,0 +1,9 @@
+# Development Rules for AI Agents
+
+- **Specification Updates**: Whenever variables or functions are created or modified, you must first inspect or update the corresponding variable/function specification document before modifying the source code to optimize token usage. These specification documents must be managed under `docs\variables'n'functions` and created on a per-source-file basis. Before creating or updating any specification document, first inspect the root folder using `ls -R` and confirm whether `docs\variables'n'functions` already exists. If it does not exist, create the folder and store all specification documents there. File names must follow the convention `[Language]filename.md`, for example `[TypeScript]UserService.md` or `[Python]auth.md`. Do not include line numbers in the document.
+- **Definition Updates**: Reflect any changes to types, arguments, and return values in the specification first.
+- **Dependency Tracking**:
+    - **Dependency Mapping**: You must explicitly map all dependencies using **Mermaid diagrams** within the specification document to show which variables or functions the element relies on.
+    - **Impact Scope**: Identify and document which existing parts of the codebase are affected by this change.
+- **Consistency Assurance**: Ensure the documentation is completely synchronized with the generated code in the same turn, keeping it aligned with the automated audit tool's feedback.
+- **Audit Report Verification**: Before declaring any task as complete, you must check the project root for the existence of `variables_functions_audit_report.md`. If this file exists, you must read it immediately, correct all reported inconsistencies or dead code in the source code or specifications, and ensure the report is resolved (deleted by the system) before finishing.
