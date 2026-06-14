@@ -2,11 +2,11 @@
 
 An LSP-based tool to automatically audit and sync markdown specifications with code, compatible with VSIX-compliant IDEs. / VSIX対応の各種IDEで動作する、LSPベースの仕様書とコードの自動整合性検証・同期ツール。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Rust](https://img.shields.io/badge/Rust-expressive%20&%20safe-orange.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-blue.svg)
-![VSIX](https://img.shields.io/badge/Extension-VSIX-blue)
-![LSP](https://img.shields.io/badge/Protocol-LSP-green)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
+![Rust](https://img.shields.io/badge/Rust-orange?style=flat-square&logo=rust&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript&logoColor=white)
+![VS Code](https://img.shields.io/badge/VS%20Code-007acc?style=flat-square&logo=visual-studio-code&logoColor=white)
+
 
 [日本語](#日本語) | [English](#english)
 
