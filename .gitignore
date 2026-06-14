@@ -5,6 +5,7 @@
 !.gitignore
 !.vscodeignore
 !package.json
+!package-lock.json
 !tsconfig.json
 !README.md
 !LICENSE
@@ -19,7 +20,8 @@
 
 # 仕様書ドキュメント
 !docs/
-!docs/**
+!docs/variables'n'functions/
+!docs/variables'n'functions/**
 
 # TypeScript 拡張機能
 !src/
