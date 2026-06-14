@@ -4,6 +4,11 @@
   "description": "%extension.description%",
   "version": "0.1.0",
   "publisher": "YuzukoUnderson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DovahkiinYuzuko/DocsAudit.git"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },
