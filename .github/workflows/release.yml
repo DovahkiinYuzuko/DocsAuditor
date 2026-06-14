@@ -78,3 +78,27 @@ jobs:
         with:
           name: vsix-${{ matrix.target }}
           path: "*.vsix"
+
+  publish:
+    name: Create GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download VSIX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: vsix-artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: vsix-artifacts/**/*.vsix
+          draft: false
+          prerelease: false
+
