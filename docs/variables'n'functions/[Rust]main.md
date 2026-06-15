@@ -37,7 +37,7 @@ LSPサーバーの実体。非同期タスク（`tokio::spawn`）にクローン
   - 対象ファイルが仕様書かコードかを判別し、対になるファイルと言語を特定する。
   - 仕様書ファイル名から言語・シンボル名を抽出する際、`.md` 拡張子で終わっており、十分な長さ（`end_bracket + 4` 以上）があるかを検証するDoS対策ガードを適用した上でスライスを行います。
   - 整合性照合のため、仕様書側は `parser::parse_markdown_spec` でパースし、コード側は `parser::parse_code(&code_text, &lang)` を用いて対象言語のAST解析を実行する。
-  - プロジェクト全体のシンボル収集には、`force_update_cache` が `true` の場合、あるいはキャッシュが空の場合のみ `collect_project_used_symbols` で再スキャンを行い、それ以外（通常のキー入力による `did_change` 時）は高速化のためキャッシュされた値を使用します。
+  - プロジェクト全体のシンボル収集には、`force_update_cache` が `true` の場合、あるいはキャッシュが空の場合のみ `collect_project_used_symbols` で再スキャンを行います。さらに、`force_update_cache` が `true` の場合は、プロジェクト内のすべての仕様書ファイルを再スキャン・再監査し、全体の診断結果と `issues_cache`、監査レポートを最新の状態に更新します。それ以外（通常のキー入力による `did_change` 時）は高速化のためキャッシュされた値を使用し、変更されたファイル単体のみを監査します。
   - 照合結果からエラーがあれば、`locale` 情報に応じた `i18n` 翻訳メッセージを作成し、クライアントに対して `publish_diagnostics` を発行してエラー波線を表示する。
   - 同様に `variables_functions_audit_report.md` をロケールに合わせて生成/削除する。レポート出力時のシンボル名等は `escape_markdown` でエスケープします。
   - 処理完了後、HFSMを `AnalysisCompleted` に遷移させる。
@@ -51,6 +51,15 @@ LSPサーバーの実体。非同期タスク（`tokio::spawn`）にクローン
   - 起動時のフリーズを防ぐため、`LanguageServer::initialized` 内で `tokio::spawn` を介して非同期スレッドで呼び出される。
   - パフォーマンス向上のため、プロジェクト全体のシンボル出現情報を収集する重い再帰走査 `collect_project_used_symbols` は、ループに入る前に1回だけ実行し、収集した結果をループ内の各仕様書の解析に再利用する。
   - 解析結果は `publish_diagnostics` を介してクライアントに通知され、また一括で `variables_functions_audit_report.md` に出力される。
+
+### `run_scan`
+- **引数**:
+  - `backend: &Backend`
+- **戻り値**: `void` (非同期)
+- **説明**:
+  - `run_initial_scan` の実際のスキャン処理を担うヘルパー関数。
+  - `force_update_cache` が `true` になった時、あるいは初期起動時に呼び出され、プロジェクト内のすべての仕様書ファイルを読み込み、対応するコードファイルと照合して診断結果を送信する。
+  - 監査結果に基づいて `variables_functions_audit_report.md` を新規作成または削除する。
 
 ### `LanguageServer` トレイト実装
 `Backend` に対して `tower_lsp::LanguageServer` を実装する。

@@ -528,10 +528,9 @@ fn extract_go_short_var_info(node: Node, source: &str, symbols: &mut Vec<SymbolI
 pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
     let mut symbols = Vec::new();
     
-    // 3段目の見出し `### `シンボル名`` または `### `シンボル名` (Lxx-xx)` にマッチする正規表現
-    // バッククォートの後にスペースや他の文字（(構造体)など）があるものは除外するため、
-    // 行番号以外の文字がバッククォートの後ろに存在しないことを保証する
-    let heading_regex = Regex::new(r"^###\s+`([^`]+)`(?:\s*\(L(\d+)(?:-(\d+))?\))?\s*$").unwrap();
+    // 3段目以上の見出し（###や####など）で、`シンボル名` または `シンボル名` (Lxx-xx) にマッチする正規表現
+    // バッククォートの前に他の文字（例: 関数:）があっても許容する
+    let heading_regex = Regex::new(r"^#{3,}[^`]*`([^`]+)`(?:\s*\(L(\d+)(?:-(\d+))?\))?\s*$").unwrap();
     
     // 1. 変数や関数の見出しから宣言情報を抽出する
     for (idx, line) in content.lines().enumerate() {
@@ -642,7 +641,7 @@ fn walk_rust_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>) {
 
 fn collect_used_symbols(node: Node, source: &str, used: &mut std::collections::HashSet<String>) {
     let kind = node.kind();
-    if kind == "identifier" || kind == "type_identifier" || kind == "scoped_identifier" || kind == "field_identifier" {
+    if kind.ends_with("identifier") {
         if let Ok(text) = node.utf8_text(source.as_bytes()) {
             let t = text.trim().to_string();
             if !t.is_empty() {
@@ -1969,5 +1968,44 @@ class Main {
         let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
         assert_eq!(var.name, "baseScore");
         assert_eq!(var.var_type, Some("int".to_string()));
+    }
+
+    #[test]
+    fn test_parse_markdown_spec_new() {
+        let doc = r#"
+# 仕様書タイトル
+
+## セクション
+
+### `my_func` (L10-20)
+- 何か説明
+
+### 関数:`my_func_with_prefix` (L25-30)
+- 何か説明
+
+#### `my_var_h4` (L35)
+- 見出し4
+
+##### 変数: `my_var_h5`
+- 見出し5
+        "#;
+        let symbols = parse_markdown_spec(doc);
+        assert_eq!(symbols.len(), 4);
+
+        assert_eq!(symbols[0].name, "my_func");
+        assert_eq!(symbols[0].line_range, Some((10, 20)));
+        assert_eq!(symbols[0].spec_line, Some(6));
+
+        assert_eq!(symbols[1].name, "my_func_with_prefix");
+        assert_eq!(symbols[1].line_range, Some((25, 30)));
+        assert_eq!(symbols[1].spec_line, Some(9));
+
+        assert_eq!(symbols[2].name, "my_var_h4");
+        assert_eq!(symbols[2].line_range, Some((35, 35)));
+        assert_eq!(symbols[2].spec_line, Some(12));
+
+        assert_eq!(symbols[3].name, "my_var_h5");
+        assert_eq!(symbols[3].line_range, None);
+        assert_eq!(symbols[3].spec_line, Some(15));
     }
 }

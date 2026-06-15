@@ -319,6 +319,11 @@ impl Backend {
                 cache.as_ref().unwrap().clone()
             }
         };
+
+        if force_update_cache {
+            self.run_scan(Some(project_used)).await;
+            return;
+        }
         let spec_path_opt = spec_uri.to_file_path().ok();
 
         let locale = self.locale.lock().await;
@@ -578,7 +583,10 @@ impl Backend {
     async fn run_initial_scan(&self) {
         // クライアントの初期化完了を少し待つための安全スリープ
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        self.run_scan(None).await;
+    }
 
+    async fn run_scan(&self, project_used_precalculated: Option<std::collections::HashSet<String>>) {
         let root_path_opt = { self.root_path.lock().await.clone() };
         let root_path = match root_path_opt {
             Some(path) => path,
@@ -597,7 +605,7 @@ impl Backend {
 
         let locale = { self.locale.lock().await.clone() };
 
-        // 起動時自動インジェクション設定の確認（ループの外で1回だけ行う）
+        // 起動時自動インジェクション設定 of the 確認（ループの外で1回だけ行う）
         let config_item = ConfigurationItem {
             scope_uri: None,
             section: Some("docsAuditor.autoInjection".to_string()),
@@ -610,7 +618,10 @@ impl Backend {
         }
 
         // プロジェクト全体のシンボル出現情報をループの前に1度だけ収集
-        let project_used = collect_project_used_symbols(&root_path).await;
+        let project_used = match project_used_precalculated {
+            Some(symbols) => symbols,
+            None => collect_project_used_symbols(&root_path).await,
+        };
 
         while let Ok(Some(entry)) = read_dir.next_entry().await {
             let path = entry.path();
