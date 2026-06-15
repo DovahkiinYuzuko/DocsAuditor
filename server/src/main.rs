@@ -306,7 +306,8 @@ impl Backend {
         }
 
         let spec_symbols = parser::parse_markdown_spec(&spec_text);
-        let code_symbols = parser::parse_code(&code_text, &target_lang);
+        let mut code_symbols = parser::parse_code(&code_text, &target_lang);
+        parser::fallback_missing_symbols(&mut code_symbols, &spec_symbols, &code_text);
         
         // パフォーマンス最適化: キャッシュを使用してDidChange時の全体スキャンを削減
         let project_used = {
@@ -656,7 +657,8 @@ impl Backend {
                                     if let Some(found_code_path) = find_file_in_dir(&root_path, &target_filename).await {
                                         if let Ok(code_text) = tokio::fs::read_to_string(&found_code_path).await {
                                             let spec_symbols = parser::parse_markdown_spec(&spec_text);
-                                            let code_symbols = parser::parse_code(&code_text, &target_lang);
+                                            let mut code_symbols = parser::parse_code(&code_text, &target_lang);
+                                            parser::fallback_missing_symbols(&mut code_symbols, &spec_symbols, &code_text);
                                             
                                             // 事前収集した project_used を再利用
                                             let issues = audit_symbols(&spec_symbols, &code_symbols, &project_used, &locale);

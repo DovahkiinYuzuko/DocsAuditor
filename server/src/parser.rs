@@ -621,6 +621,40 @@ pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
     symbols
 }
 
+pub fn fallback_missing_symbols(code_symbols: &mut Vec<SymbolInfo>, spec_symbols: &[SymbolInfo], code_text: &str) {
+    for spec in spec_symbols {
+        if code_symbols.iter().any(|c| c.name == spec.name) {
+            continue;
+        }
+
+        let escaped_name = regex::escape(&spec.name);
+        let pattern = format!(r"\b{}\b", escaped_name);
+        if let Ok(re) = Regex::new(&pattern) {
+            let mut found_line = None;
+            for (idx, line) in code_text.lines().enumerate() {
+                if re.is_match(line) {
+                    found_line = Some(idx + 1);
+                    break;
+                }
+            }
+
+            if let Some(line_num) = found_line {
+                code_symbols.push(SymbolInfo {
+                    name: spec.name.clone(),
+                    kind: spec.kind.clone(),
+                    params: None,
+                    return_type: None,
+                    var_type: None,
+                    line_range: Some((line_num, line_num)),
+                    spec_line: None,
+                    dependencies: None,
+                    used_symbols: None,
+                });
+            }
+        }
+    }
+}
+
 pub fn parse_rust_code(code: &str) -> Vec<SymbolInfo> {
     let mut parser = TsParser::new();
     parser.set_language(tree_sitter_rust::language()).expect("Failed to load Rust language");
@@ -2035,5 +2069,30 @@ class Main {
         assert_eq!(symbols[3].name, "my_var_h5");
         assert_eq!(symbols[3].line_range, None);
         assert_eq!(symbols[3].spec_line, Some(15));
+    }
+
+    #[test]
+    fn test_fallback_missing_symbols() {
+        let spec = vec![
+            SymbolInfo {
+                name: "SafeTokioCommand".to_string(),
+                kind: SymbolKind::Variable,
+                params: None,
+                return_type: None,
+                var_type: None,
+                line_range: None,
+                spec_line: Some(12),
+                dependencies: None,
+                used_symbols: None,
+            }
+        ];
+        let mut code_symbols = vec![];
+        let code_text = "pub struct SafeTokioCommand;\nimpl SafeTokioCommand {\n}";
+        
+        fallback_missing_symbols(&mut code_symbols, &spec, code_text);
+        
+        assert_eq!(code_symbols.len(), 1);
+        assert_eq!(code_symbols[0].name, "SafeTokioCommand");
+        assert_eq!(code_symbols[0].line_range, Some((1, 1)));
     }
 }
