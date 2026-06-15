@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "YuzukoUnderson",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/DovahkiinYuzuko/DocsAuditor.git"
@@ -16,7 +17,20 @@
     "Linters"
   ],
   "activationEvents": [
-    "*"
+    "onLanguage:markdown",
+    "onLanguage:rust",
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:python",
+    "onLanguage:go",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:csharp",
+    "onLanguage:ruby",
+    "onLanguage:swift",
+    "onLanguage:kotlin",
+    "onLanguage:java",
+    "onView:docs-auditor-settings"
   ],
   "main": "./out/extension.js",
   "contributes": {

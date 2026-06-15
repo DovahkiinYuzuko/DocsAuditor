@@ -889,15 +889,20 @@ impl Backend {
 }
 
 fn normalize_url(url: &Url) -> Url {
-    let mut s = url.to_string();
-    if s.starts_with("file:///") && s.len() >= 10 {
-        let drive_char = s.as_bytes()[8] as char;
-        if drive_char.is_ascii_uppercase() && s.as_bytes()[9] == b':' {
-            let lower = drive_char.to_ascii_lowercase();
-            s.replace_range(8..9, &lower.to_string());
+    if let Ok(path) = url.to_file_path() {
+        if let Ok(new_url) = Url::from_file_path(&path) {
+            let mut s = new_url.to_string();
+            if s.starts_with("file:///") && s.len() >= 10 {
+                let drive_char = s.as_bytes()[8] as char;
+                if drive_char.is_ascii_uppercase() && s.as_bytes()[9] == b':' {
+                    let lower = drive_char.to_ascii_lowercase();
+                    s.replace_range(8..9, &lower.to_string());
+                }
+            }
+            return Url::parse(&s).unwrap_or(new_url);
         }
     }
-    Url::parse(&s).unwrap_or_else(|_| url.clone())
+    url.clone()
 }
 
 async fn find_file_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {
