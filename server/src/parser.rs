@@ -58,6 +58,24 @@ fn walk_typescript_node(node: Node, source: &str, symbols: &mut Vec<SymbolInfo>)
         }
     } else if kind == "lexical_declaration" || kind == "variable_declaration" {
         extract_ts_variable_info(node, source, symbols);
+    } else if kind == "interface_declaration" || kind == "type_alias_declaration" {
+        if let Some(name_node) = node.child_by_field_name("name") {
+            if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
+                let start_line = node.start_position().row + 1;
+                let end_line = node.end_position().row + 1;
+                symbols.push(SymbolInfo {
+                    name: name.trim().to_string(),
+                    kind: SymbolKind::Variable,
+                    params: None,
+                    return_type: None,
+                    var_type: None,
+                    line_range: Some((start_line, end_line)),
+                    spec_line: None,
+                    dependencies: None,
+                    used_symbols: None,
+                });
+            }
+        }
     }
 
     let mut cursor = node.walk();
@@ -1728,17 +1746,27 @@ const DEFAULT_LIMIT = 50;
 function processUser(id: string, age: number): boolean {
     return true;
 }
+interface User {
+    name: string;
+}
+type UserId = string;
         "#;
         let symbols = parse_typescript_code(code);
-        assert_eq!(symbols.len(), 2);
+        assert_eq!(symbols.len(), 4);
         
         let func = symbols.iter().find(|s| s.kind == SymbolKind::Function).unwrap();
         assert_eq!(func.name, "processUser");
         assert_eq!(func.params, Some(vec![("id".to_string(), "string".to_string()), ("age".to_string(), "number".to_string())]));
         assert_eq!(func.return_type, Some("boolean".to_string()));
         
-        let var = symbols.iter().find(|s| s.kind == SymbolKind::Variable).unwrap();
-        assert_eq!(var.name, "DEFAULT_LIMIT");
+        let var = symbols.iter().find(|s| s.name == "DEFAULT_LIMIT").unwrap();
+        assert_eq!(var.kind, SymbolKind::Variable);
+
+        let user_interface = symbols.iter().find(|s| s.name == "User").unwrap();
+        assert_eq!(user_interface.kind, SymbolKind::Variable);
+
+        let user_id_type = symbols.iter().find(|s| s.name == "UserId").unwrap();
+        assert_eq!(user_id_type.kind, SymbolKind::Variable);
     }
 
     #[test]

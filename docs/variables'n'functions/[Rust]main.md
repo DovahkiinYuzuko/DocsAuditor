@@ -40,7 +40,7 @@ LSPサーバーの実体。非同期タスク（`tokio::spawn`）にクローン
   - 同様に `variables_functions_audit_report.md` をロケールに合わせて生成/削除する。レポート出力時のシンボル名等は `escape_markdown` でエスケープします。
   - 処理完了後、HFSMを `AnalysisCompleted` に遷移させる。
 
-### `run_initial_scan` (L583-587)
+### `run_initial_scan` (L583-587)　
 - **引数**:
   - `backend: &Backend`
 - **戻り値**: `void` (非同期)
@@ -49,7 +49,7 @@ LSPサーバーの実体。非同期タスク（`tokio::spawn`）にクローン
   - 起動時のフリーズを防ぐため、`LanguageServer::initialized` 内で `tokio::spawn` を介して非同期スレッドで呼び出される。
   - 内部では `run_scan(None)` を呼び出す。
 
-### `run_scan` (L589-888)
+### `run_scan` (L589-888)　
 - **引数**:
   - `backend: &Backend`
   - `project_used_precalculated: Option<std::collections::HashSet<String>>`
@@ -61,7 +61,7 @@ LSPサーバーの実体。非同期タスク（`tokio::spawn`）にクローン
   - 解析結果は `publish_diagnostics` を介してクライアントに通知され、また一括で `variables_functions_audit_report.md` に出力される。
   - 監査結果に基づいて `variables_functions_audit_report.md` を新規作成または削除する。
 
-### `LanguageServer` トレイト実装
+### `LanguageServer` トレイト実装　
 `Backend` に対して `tower_lsp::LanguageServer` を実装する。
 - **`initialize`**: HFSMに `Initialize` をディスパッチし、`initialization_options` からロケール設定（`locale`）を読み取って保持するとともに、サーバーの対応能力（LSP Capabilities: SyncKind::Full, CodeActionProviderなど）をクライアントに応答する。
 - **`initialized`**: LSPサーバー初期化完了時に呼び出される。`self.clone()` を作成し、`tokio::spawn` を使って初期一括スキャン（`run_initial_scan`）を非同期にバックグラウンドで開始する。
