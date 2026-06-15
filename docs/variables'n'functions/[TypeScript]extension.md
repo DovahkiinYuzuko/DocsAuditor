@@ -7,7 +7,7 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
 
 ## 変数定義
 
-### `client` (L11-11)
+### `client` (L11-11) 
 - **型**: `LanguageClient | undefined`
 - **説明**: 起動したLSPクライアントのインスタンスを保持するグローバル変数。
 
@@ -44,13 +44,23 @@ LSPサーバー（Rust）を起動し、VS Codeエディタとの間でLSP通信
   - 拡張機能がクローズまたは無効化される際に呼び出される。
   - `client` が起動していれば、クライアントの停止（`stop`）処理を呼び出す。
 
+### `DocsAuditorSettingsProvider` (クラス)
+- **説明**:
+  - `vscode.WebviewViewProvider` を実装し、左のアクティビティバーから開くサイドバー用の設定ビューを提供する。
+  - **メソッド**:
+    - `resolveWebviewView(webviewView: vscode.WebviewView, context: vscode.WebviewViewResolveContext, token: vscode.CancellationToken)`: WebviewView の初期化、HTML の設定、および Webview からの `postMessage` メッセージ受信ハンドラを設定する。
+    - `_getHtmlForWebview(webview: vscode.Webview)`: トグルスイッチとステータスを表示するモダンな HTML/CSS を生成する。HTML 内のイベントで `autoInjection` 設定（`docsAuditor.autoInjection`）を変更できるようにする。
+
 ## 依存関係マッピング (Dependency Mapping)
 
 ```mermaid
 graph TD
     activate --> client
     activate --> outputChannel
+    activate --> DocsAuditorSettingsProvider
     deactivate --> client
+    DocsAuditorSettingsProvider --> resolveWebviewView
+    resolveWebviewView --> _getHtmlForWebview
 ```
 
 ## 影響範囲 (Impact Scope)

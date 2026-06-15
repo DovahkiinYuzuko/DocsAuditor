@@ -20,6 +20,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "docs-auditor-sidebar",
+          "title": "Docs Auditor",
+          "icon": "$(checklist)"
+        }
+      ]
+    },
+    "views": {
+      "docs-auditor-sidebar": [
+        {
+          "type": "webview",
+          "id": "docs-auditor-settings",
+          "name": "Docs Auditor Settings"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "%config.title%",
