@@ -29,8 +29,7 @@
     "onLanguage:ruby",
     "onLanguage:swift",
     "onLanguage:kotlin",
-    "onLanguage:java",
-    "onView:docs-auditor-settings"
+    "onLanguage:java"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -48,7 +47,8 @@
         {
           "type": "webview",
           "id": "docs-auditor-settings",
-          "name": "Docs Auditor Settings"
+          "name": "Docs Auditor Settings",
+          "icon": "icon.png"
         }
       ]
     },
