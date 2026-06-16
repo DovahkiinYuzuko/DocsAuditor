@@ -622,6 +622,15 @@ pub fn parse_markdown_spec(content: &str) -> Vec<SymbolInfo> {
 }
 
 pub fn fallback_missing_symbols(code_symbols: &mut Vec<SymbolInfo>, spec_symbols: &[SymbolInfo], code_text: &str) {
+    let mut all_words = std::collections::HashSet::new();
+    let word_re = Regex::new(r"\b[a-zA-Z_]\w*\b").unwrap();
+    for cap in word_re.captures_iter(code_text) {
+        if let Some(m) = cap.get(0) {
+            all_words.insert(m.as_str().to_string());
+        }
+    }
+    let all_words_vec: Vec<String> = all_words.into_iter().collect();
+
     for spec in spec_symbols {
         if code_symbols.iter().any(|c| c.name == spec.name) {
             continue;
@@ -639,6 +648,9 @@ pub fn fallback_missing_symbols(code_symbols: &mut Vec<SymbolInfo>, spec_symbols
             }
 
             if let Some(line_num) = found_line {
+                let mut my_used = all_words_vec.clone();
+                my_used.retain(|w| w != &spec.name);
+
                 code_symbols.push(SymbolInfo {
                     name: spec.name.clone(),
                     kind: spec.kind.clone(),
@@ -648,7 +660,7 @@ pub fn fallback_missing_symbols(code_symbols: &mut Vec<SymbolInfo>, spec_symbols
                     line_range: Some((line_num, line_num)),
                     spec_line: None,
                     dependencies: None,
-                    used_symbols: None,
+                    used_symbols: Some(my_used),
                 });
             }
         }
@@ -2087,12 +2099,16 @@ class Main {
             }
         ];
         let mut code_symbols = vec![];
-        let code_text = "pub struct SafeTokioCommand;\nimpl SafeTokioCommand {\n}";
+        let code_text = "pub struct SafeTokioCommand;\nimpl SafeTokioCommand {\n    fn use_git() { find_git_executable(); }\n}";
         
         fallback_missing_symbols(&mut code_symbols, &spec, code_text);
         
         assert_eq!(code_symbols.len(), 1);
         assert_eq!(code_symbols[0].name, "SafeTokioCommand");
         assert_eq!(code_symbols[0].line_range, Some((1, 1)));
+        
+        let used = code_symbols[0].used_symbols.as_ref().unwrap();
+        assert!(used.contains(&"find_git_executable".to_string()));
+        assert!(!used.contains(&"SafeTokioCommand".to_string()));
     }
 }
